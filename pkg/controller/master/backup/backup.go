@@ -6,10 +6,15 @@ package backup
 // 1. support VM live & offline backup to the supported backupTarget(i.e, nfs_v4 or s3 storage server).
 // 2. restore a backup to a new VM or replacing it with the existing VM is supported.
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 
+	"github.com/longhorn/backupstore"
 	ctlcorev1 "github.com/rancher/wrangler/pkg/generated/controllers/core/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,6 +29,7 @@ import (
 	ctllonghornv1 "github.com/harvester/harvester/pkg/generated/controllers/longhorn.io/v1beta1"
 	ctlsnapshotv1 "github.com/harvester/harvester/pkg/generated/controllers/snapshot.storage.k8s.io/v1beta1"
 	"github.com/harvester/harvester/pkg/settings"
+	"github.com/harvester/harvester/pkg/util"
 )
 
 const (
@@ -89,50 +95,49 @@ type Handler struct {
 
 // OnBackupChange handles vm backup object on change and reconcile vm backup status
 func (h *Handler) OnBackupChange(key string, vmBackup *harvesterv1.VirtualMachineBackup) (*harvesterv1.VirtualMachineBackup, error) {
-	if vmBackup == nil || vmBackup.DeletionTimestamp != nil {
-		return nil, nil
-	}
-
-	if isBackupReady(vmBackup) {
+	if vmBackup == nil || vmBackup.DeletionTimestamp != nil || isBackupReady(vmBackup) {
 		return nil, nil
 	}
 
 	// set vmBackup init status
-	if vmBackup.Status == nil {
-		return nil, h.updateStatus(vmBackup, nil)
-	}
-
-	// get vmBackup source
-	sourceVM, err := h.getBackupSource(vmBackup)
-	if err != nil {
-		return nil, err
-	}
-
-	// check if the VM is running, if not make sure the volumes are mounted to the host
-	if !sourceVM.Status.Ready || !sourceVM.Status.Created {
-		if err := h.reconcileLonghornVolumes(sourceVM); err != nil {
-			return vmBackup, err
+	if vmBackup.Status == nil || vmBackup.Status.SourceSpec == nil || vmBackup.Status.VolumeBackups == nil {
+		// get vmBackup source
+		sourceVM, err := h.getBackupSource(vmBackup)
+		if err != nil {
+			return nil, err
 		}
-	}
 
-	// TODO, make sure status is initialized, and "Lock" the source VM by adding a finalizer and setting snapshotInProgress in status
-	if sourceVM != nil && isBackupProgressing(vmBackup) {
-		// create source spec and volume backups if it is not exist
-		if vmBackup.Status.SourceSpec == nil || vmBackup.Status.VolumeBackups == nil {
-			vmBackup.Status, err = h.updateBackupStatusContent(vmBackup, sourceVM.DeepCopy())
-			if err != nil {
+		// check if the VM is running, if not make sure the volumes are mounted to the host
+		if !sourceVM.Status.Ready || !sourceVM.Status.Created {
+			if err := h.reconcileLonghornVolumes(sourceVM); err != nil {
 				return nil, err
 			}
 		}
 
-		// reconcile backup status of volume backups, validate if those volumeSnapshots are ready to use
-		if err = h.reconcileBackupStatus(vmBackup); err != nil {
-			return nil, err
-		}
-
-		return vmBackup, h.updateStatus(vmBackup, sourceVM)
+		return nil, h.initBackup(vmBackup, sourceVM)
 	}
-	return nil, nil
+
+	target, err := settings.DecodeBackupTarget(settings.BackupTargetSet.Get())
+	if err != nil {
+		return nil, err
+	}
+
+	if isBackupAnnotationMissing(vmBackup) {
+		return nil, h.initAnnotations(vmBackup, target)
+	}
+
+	// TODO, make sure status is initialized, and "Lock" the source VM by adding a finalizer and setting snapshotInProgress in status
+
+	// reconcile backup status of volume backups, validate if those volumeSnapshots are ready to use
+	if err := h.reconcileBackupStatus(vmBackup); err != nil {
+		return nil, err
+	}
+
+	if err := h.uploadVMBackupMetadata(vmBackup, target); err != nil {
+		return nil, err
+	}
+
+	return vmBackup, h.updateConditions(vmBackup)
 }
 
 func (h *Handler) getBackupSource(vmBackup *harvesterv1.VirtualMachineBackup) (*kv1.VirtualMachine, error) {
@@ -229,27 +234,14 @@ func (h *Handler) getSecretBackupFromSecret(namespace, name string) (*harvesterv
 	return &harvesterv1.SecretBackup{Name: secret.Name, Data: data}, nil
 }
 
-// updateBackupStatusContent helps to store the backup source and volume contents within the VM backup status
-func (h *Handler) updateBackupStatusContent(backup *harvesterv1.VirtualMachineBackup, vm *kv1.VirtualMachine) (*harvesterv1.VirtualMachineBackupStatus, error) {
+// initBackup initialize VM backup status and annotation
+func (h *Handler) initBackup(backup *harvesterv1.VirtualMachineBackup, vm *kv1.VirtualMachine) error {
 	var err error
-	status := backup.Status.DeepCopy()
-
-	if status.VolumeBackups == nil {
-		status.VolumeBackups, err = h.getVolumeBackups(backup, vm)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if status.SecretBackups == nil {
-		status.SecretBackups, err = h.getSecretBackups(vm)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if status.SourceSpec == nil {
-		status.SourceSpec = &harvesterv1.VirtualMachineSourceSpec{
+	backupCpy := backup.DeepCopy()
+	backupCpy.Status = &harvesterv1.VirtualMachineBackupStatus{
+		ReadyToUse: pointer.BoolPtr(false),
+		SourceUID:  &vm.UID,
+		SourceSpec: &harvesterv1.VirtualMachineSourceSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        vm.ObjectMeta.Name,
 				Namespace:   vm.ObjectMeta.Namespace,
@@ -257,10 +249,41 @@ func (h *Handler) updateBackupStatusContent(backup *harvesterv1.VirtualMachineBa
 				Labels:      vm.ObjectMeta.Labels,
 			},
 			Spec: vm.Spec,
+		},
+	}
+
+	if backupCpy.Status.VolumeBackups, err = h.getVolumeBackups(backup, vm); err != nil {
+		return err
+	}
+
+	if backupCpy.Status.SecretBackups, err = h.getSecretBackups(vm); err != nil {
+		return err
+	}
+
+	if _, err := h.vmBackups.Update(backupCpy); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (h *Handler) initAnnotations(backup *harvesterv1.VirtualMachineBackup, target *settings.BackupTarget) error {
+	var backupCpy = backup.DeepCopy()
+	if backupCpy.Annotations == nil {
+		backupCpy.Annotations = map[string]string{}
+	}
+
+	if backupCpy.Annotations[BackupTargetAnnotation] == "" {
+		backupCpy.Annotations[BackupTargetAnnotation] = target.Endpoint
+		if target.Type == settings.S3BackupType {
+			backupCpy.Annotations[BackupBucketNameAnnotation] = target.BucketName
+			backupCpy.Annotations[BackupBucketRegionAnnotation] = target.BucketRegion
 		}
 	}
 
-	return status, nil
+	if _, err := h.vmBackups.Update(backupCpy); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (h *Handler) getBackupPVC(namespace, name string) (*corev1.PersistentVolumeClaim, error) {
@@ -280,31 +303,11 @@ func (h *Handler) getBackupPVC(namespace, name string) (*corev1.PersistentVolume
 	return pvc, nil
 }
 
-func (h *Handler) updateStatus(vmBackup *harvesterv1.VirtualMachineBackup, source *kv1.VirtualMachine) error {
+func (h *Handler) updateConditions(vmBackup *harvesterv1.VirtualMachineBackup) error {
 	var vmBackupCpy = vmBackup.DeepCopy()
-	if vmBackupCpy.Status == nil {
-		vmBackupCpy.Status = &harvesterv1.VirtualMachineBackupStatus{
-			ReadyToUse: pointer.BoolPtr(false),
-		}
-	}
-
-	if source != nil {
-		vmBackupCpy.Status.SourceUID = &source.UID
-	}
-
 	if isBackupProgressing(vmBackupCpy) {
-		source, err := h.getBackupSource(vmBackupCpy)
-		if err != nil {
-			return err
-		}
-
-		if source != nil {
-			updateBackupCondition(vmBackupCpy, newProgressingCondition(corev1.ConditionTrue, "Operation in progress"))
-		} else {
-			updateBackupCondition(vmBackupCpy, newProgressingCondition(corev1.ConditionFalse, "Source does not exist"))
-		}
 		updateBackupCondition(vmBackupCpy, newReadyCondition(corev1.ConditionFalse, "Not ready"))
-	} else if vmBackupError(vmBackupCpy) != nil {
+	} else if isBackupError(vmBackup) {
 		updateBackupCondition(vmBackupCpy, newProgressingCondition(corev1.ConditionFalse, "In error state"))
 		updateBackupCondition(vmBackupCpy, newReadyCondition(corev1.ConditionFalse, "Error"))
 	} else if isBackupReady(vmBackupCpy) {
@@ -315,27 +318,53 @@ func (h *Handler) updateStatus(vmBackup *harvesterv1.VirtualMachineBackup, sourc
 		updateBackupCondition(vmBackupCpy, newReadyCondition(corev1.ConditionUnknown, "Unknown state"))
 	}
 
-	if vmBackupCpy.Annotations == nil {
-		vmBackupCpy.Annotations = make(map[string]string)
-	}
-
-	if vmBackupCpy.Annotations[BackupTargetAnnotation] == "" {
-		target, err := decodeTarget(settings.BackupTargetSet.Get())
-		if err != nil {
-			return err
-		}
-		vmBackupCpy.Annotations[BackupTargetAnnotation] = target.Endpoint
-		if target.Type == settings.S3BackupType {
-			vmBackupCpy.Annotations[BackupBucketNameAnnotation] = target.BucketName
-			vmBackupCpy.Annotations[BackupBucketRegionAnnotation] = target.BucketRegion
-		}
-	}
-
-	if !reflect.DeepEqual(vmBackup.Status, vmBackupCpy.Status) && vmBackupCpy.Status != nil {
+	if !reflect.DeepEqual(vmBackup.Status, vmBackupCpy.Status) {
 		if _, err := h.vmBackups.Update(vmBackupCpy); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+func (h *Handler) uploadVMBackupMetadata(vmBackup *harvesterv1.VirtualMachineBackup, target *settings.BackupTarget) error {
+	if target.Type == settings.S3BackupType {
+		secret, err := h.secretCache.Get(util.LonghornSystemNamespaceName, util.BackupTargetSecretName)
+		if err != nil {
+			return err
+		}
+		os.Setenv(AWSAccessKey, string(secret.Data[AWSAccessKey]))
+		os.Setenv(AWSSecretKey, string(secret.Data[AWSSecretKey]))
+		os.Setenv(AWSEndpoints, string(secret.Data[AWSEndpoints]))
+		os.Setenv(AWSCERT, string(secret.Data[AWSCERT]))
+	}
+
+	bsDriver, err := backupstore.GetBackupStoreDriver(ConstructEndpoint(target))
+	if err != nil {
+		return err
+	}
+
+	vmBackupMetadata := &VirtualMachineBackupMetadata{
+		Name:          vmBackup.Name,
+		Namespace:     vmBackup.Namespace,
+		BackupSpec:    vmBackup.Spec,
+		VMSourceSpec:  vmBackup.Status.SourceSpec,
+		VolumeBackups: vmBackup.Status.VolumeBackups,
+		SecretBackups: vmBackup.Status.SecretBackups,
+	}
+	if vmBackup.Namespace == "" {
+		vmBackupMetadata.Namespace = metav1.NamespaceDefault
+	}
+
+	j, err := json.Marshal(vmBackupMetadata)
+	if err != nil {
+		return err
+	}
+
+	destURL := filepath.Join(metadataFolderPath, fmt.Sprintf("%s.cfg", vmBackup.Name))
+	if err := bsDriver.Write(destURL, bytes.NewReader(j)); err != nil {
+		return err
+	}
+
 	return nil
 }
 
