@@ -6,6 +6,7 @@ import (
 	"time"
 
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/v2/pkg/apis/volumesnapshot/v1beta1"
+	"github.com/rancher/wrangler/pkg/condition"
 	wranglername "github.com/rancher/wrangler/pkg/name"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -66,6 +67,15 @@ func GetVMBackupError(vmBackup *harvesterv1.VirtualMachineBackup) *harvesterv1.E
 	return nil
 }
 
+func GetCondition(conditions []harvesterv1.Condition, c condition.Cond) *harvesterv1.Condition {
+	for _, cond := range conditions {
+		if cond.Type == c {
+			return &cond
+		}
+	}
+	return nil
+}
+
 func newReadyCondition(status corev1.ConditionStatus, reason string, message string) harvesterv1.Condition {
 	return harvesterv1.Condition{
 		Type:               harvesterv1.BackupConditionReady,
@@ -84,6 +94,16 @@ func newProgressingCondition(status corev1.ConditionStatus, reason string, messa
 		// ref: https://github.com/rancher/wrangler/blob/6970ad98ba7bd2755312ccfc6540a92bc9a9e316/pkg/summary/summarizers.go#L220-L243
 		Reason:             reason,
 		Message:            message,
+		LastTransitionTime: currentTime().Format(time.RFC3339),
+	}
+}
+
+func newGuestFsFreezeCondition(status corev1.ConditionStatus, reason string, message string) harvesterv1.Condition {
+	return harvesterv1.Condition{
+		Type:               harvesterv1.BackupConditionGuestFsFreeze,
+		Status:             status,
+		Message:            message,
+		Reason:             reason,
 		LastTransitionTime: currentTime().Format(time.RFC3339),
 	}
 }

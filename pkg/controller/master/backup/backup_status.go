@@ -21,6 +21,9 @@ import (
 func (h *Handler) updateConditions(vmBackup *harvesterv1.VirtualMachineBackup) error {
 	var vmBackupCpy = vmBackup.DeepCopy()
 	if IsBackupProgressing(vmBackupCpy) {
+		if cond := GetCondition(vmBackupCpy.Status.Conditions, harvesterv1.BackupConditionGuestFsFreeze); cond == nil {
+			updateBackupCondition(vmBackupCpy, newGuestFsFreezeCondition(corev1.ConditionFalse, "", ""))
+		}
 		updateBackupCondition(vmBackupCpy, newProgressingCondition(corev1.ConditionTrue, "", "Operation in progress"))
 		updateBackupCondition(vmBackupCpy, newReadyCondition(corev1.ConditionFalse, "", "Not ready"))
 	}
@@ -39,6 +42,14 @@ func (h *Handler) updateConditions(vmBackup *harvesterv1.VirtualMachineBackup) e
 	}
 
 	if ready && (vmBackupCpy.Status.ReadyToUse == nil || !*vmBackupCpy.Status.ReadyToUse) {
+		if vmBackupCpy.Spec.GuestFsFreeze && harvesterv1.BackupConditionGuestFsFreeze.IsTrue(vmBackupCpy) {
+			// Unfreeze VM
+			if err := h.restClient.Put().Namespace(vmBackupCpy.Namespace).Resource("virtualmachineinstances").SubResource("unfreeze").Name(vmBackup.Spec.Source.Name).Do(h.context).Error(); err != nil {
+				return err
+			}
+			updateBackupCondition(vmBackupCpy, newGuestFsFreezeCondition(corev1.ConditionFalse, "", "Unfreeze Guest FS"))
+		}
+
 		vmBackupCpy.Status.CreationTime = currentTime()
 		vmBackupCpy.Status.Error = nil
 		updateBackupCondition(vmBackupCpy, newProgressingCondition(corev1.ConditionFalse, "", "Operation complete"))

@@ -22,12 +22,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sschema "k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/pointer"
 	kubevirtv1 "kubevirt.io/api/core/v1"
 
 	harvesterv1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/harvester/pkg/config"
+	"github.com/harvester/harvester/pkg/generated/clientset/versioned/scheme"
 	ctlharvesterv1 "github.com/harvester/harvester/pkg/generated/controllers/harvesterhci.io/v1beta1"
 	ctlkubevirtv1 "github.com/harvester/harvester/pkg/generated/controllers/kubevirt.io/v1"
 	ctllonghornv1 "github.com/harvester/harvester/pkg/generated/controllers/longhorn.io/v1beta1"
@@ -63,7 +66,17 @@ func RegisterBackup(ctx context.Context, management *config.Management, opts con
 	snapshotContents := management.SnapshotFactory.Snapshot().V1beta1().VolumeSnapshotContent()
 	snapshotClass := management.SnapshotFactory.Snapshot().V1beta1().VolumeSnapshotClass()
 
+	copyConfig := rest.CopyConfig(management.RestConfig)
+	copyConfig.GroupVersion = &k8sschema.GroupVersion{Group: kubevirtv1.SubresourceGroupName, Version: kubevirtv1.ApiLatestVersion}
+	copyConfig.APIPath = "/apis"
+	copyConfig.NegotiatedSerializer = scheme.Codecs.WithoutConversion()
+	restClient, err := rest.RESTClientFor(copyConfig)
+	if err != nil {
+		return err
+	}
+
 	vmBackupController := &Handler{
+		context:              ctx,
 		vmBackups:            vmBackups,
 		vmBackupController:   vmBackups,
 		vmBackupCache:        vmBackups.Cache(),
@@ -80,6 +93,7 @@ func RegisterBackup(ctx context.Context, management *config.Management, opts con
 		snapshotContentCache: snapshotContents.Cache(),
 		snapshotClassCache:   snapshotClass.Cache(),
 		recorder:             management.NewRecorder(backupControllerName, "", ""),
+		restClient:           restClient,
 	}
 
 	vmBackups.OnChange(ctx, backupControllerName, vmBackupController.OnBackupChange)
@@ -90,6 +104,7 @@ func RegisterBackup(ctx context.Context, management *config.Management, opts con
 }
 
 type Handler struct {
+	context              context.Context
 	vmBackups            ctlharvesterv1.VirtualMachineBackupClient
 	vmBackupCache        ctlharvesterv1.VirtualMachineBackupCache
 	vmBackupController   ctlharvesterv1.VirtualMachineBackupController
@@ -106,6 +121,7 @@ type Handler struct {
 	snapshotContentCache ctlsnapshotv1.VolumeSnapshotContentCache
 	snapshotClassCache   ctlsnapshotv1.VolumeSnapshotClassCache
 	recorder             record.EventRecorder
+	restClient           *rest.RESTClient
 }
 
 // OnBackupChange handles vm backup object on change and reconcile vm backup status
@@ -152,8 +168,6 @@ func (h *Handler) OnBackupChange(key string, vmBackup *harvesterv1.VirtualMachin
 
 		return nil, h.initBackup(vmBackup, sourceVM, target)
 	}
-
-	// TODO, make sure status is initialized, and "Lock" the source VM by adding a finalizer and setting snapshotInProgress in status
 
 	// create volume snapshots if not exist
 	if err := h.reconcileVolumeSnapshots(vmBackup); err != nil {
@@ -361,14 +375,15 @@ func (h *Handler) getBackupPVC(namespace, name string) (*corev1.PersistentVolume
 // For vm backup from a existent VM, we create volume snapshot from pvc.
 // For vm backup from syncing vm backup metadata, we create volume snapshot from volume snapshot content.
 func (h *Handler) reconcileVolumeSnapshots(vmBackup *harvesterv1.VirtualMachineBackup) error {
-	vmBackupCpy := vmBackup.DeepCopy()
-	for i, volumeBackup := range vmBackupCpy.Status.VolumeBackups {
+	needCreateVolumeSnapshot := false
+	volumeSnapshotMap := map[string]*snapshotv1.VolumeSnapshot{}
+	for _, volumeBackup := range vmBackup.Status.VolumeBackups {
 		if volumeBackup.Name == nil {
 			continue
 		}
 
 		snapshotName := *volumeBackup.Name
-		volumeSnapshot, err := h.getVolumeSnapshot(vmBackupCpy.Namespace, snapshotName)
+		volumeSnapshot, err := h.getVolumeSnapshot(vmBackup.Namespace, snapshotName)
 		if err != nil {
 			return err
 		}
@@ -380,7 +395,31 @@ func (h *Handler) reconcileVolumeSnapshots(vmBackup *harvesterv1.VirtualMachineB
 			h.vmBackupController.EnqueueAfter(vmBackup.Namespace, vmBackup.Name, 5*time.Second)
 			return nil
 		}
+		if volumeSnapshot == nil {
+			needCreateVolumeSnapshot = true
+		}
+		volumeSnapshotMap[snapshotName] = volumeSnapshot
+	}
 
+	vmBackupCpy := vmBackup.DeepCopy()
+	cond := GetCondition(vmBackupCpy.Status.Conditions, harvesterv1.BackupConditionGuestFsFreeze)
+	if needCreateVolumeSnapshot && vmBackup.Spec.GuestFsFreeze && (cond == nil || cond.Status == corev1.ConditionFalse) {
+		// Freeze VM
+		if err := h.restClient.Put().Namespace(vmBackupCpy.Namespace).Resource("virtualmachineinstances").SubResource("freeze").Name(vmBackup.Spec.Source.Name).Do(h.context).Error(); err != nil {
+			return err
+		}
+
+		updateBackupCondition(vmBackupCpy, newGuestFsFreezeCondition(corev1.ConditionTrue, "", "Freeze Guest FS"))
+	}
+
+	var err error
+	for i, volumeBackup := range vmBackup.Status.VolumeBackups {
+		if volumeBackup.Name == nil {
+			continue
+		}
+
+		snapshotName := *volumeBackup.Name
+		volumeSnapshot := volumeSnapshotMap[snapshotName]
 		if volumeSnapshot == nil {
 			volumeSnapshot, err = h.createVolumeSnapshot(vmBackupCpy, volumeBackup)
 			if err != nil {
@@ -394,7 +433,6 @@ func (h *Handler) reconcileVolumeSnapshots(vmBackup *harvesterv1.VirtualMachineB
 			vmBackupCpy.Status.VolumeBackups[i].CreationTime = volumeSnapshot.Status.CreationTime
 			vmBackupCpy.Status.VolumeBackups[i].Error = translateError(volumeSnapshot.Status.Error)
 		}
-
 	}
 
 	if !reflect.DeepEqual(vmBackup.Status, vmBackupCpy.Status) {
