@@ -53,6 +53,8 @@ spec:
             type: object
           spec:
             properties:
+              guestFsFreeze:
+                type: boolean
               source:
                 description: TypedLocalObjectReference contains enough information
                   to let you locate the typed referenced object inside the same namespace.
@@ -74,6 +76,7 @@ spec:
                 - name
                 type: object
             required:
+            - guestFsFreeze
             - source
             type: object
           status:

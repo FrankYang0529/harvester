@@ -15,8 +15,11 @@ const (
 	// BackupConditionReady is the "ready" condition type
 	BackupConditionReady condition.Cond = "Ready"
 
-	// ConditionProgressing is the "progressing" condition type
+	// BackupConditionProgressing is the "progressing" condition type
 	BackupConditionProgressing condition.Cond = "InProgress"
+
+	// BackupConditionGuestFsFreeze is the "guestFsFreeze" condition type
+	BackupConditionGuestFsFreeze condition.Cond = "GuestFsFreeze"
 )
 
 // DeletionPolicy defines that to do with resources when VirtualMachineRestore is deleted
@@ -51,7 +54,8 @@ type VirtualMachineBackup struct {
 }
 
 type VirtualMachineBackupSpec struct {
-	Source corev1.TypedLocalObjectReference `json:"source"`
+	Source        corev1.TypedLocalObjectReference `json:"source"`
+	GuestFsFreeze bool                             `json:"guestFsFreeze"`
 }
 
 // VirtualMachineBackupStatus is the status for a VirtualMachineBackup resource
