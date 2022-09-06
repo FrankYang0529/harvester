@@ -8,6 +8,7 @@ import (
 
 	"github.com/longhorn/backupstore"
 	ctlcorev1 "github.com/rancher/wrangler/pkg/generated/controllers/core/v1"
+	"github.com/sirupsen/logrus"
 
 	"github.com/harvester/harvester/pkg/config"
 	"github.com/harvester/harvester/pkg/controller/master/backup"
@@ -31,6 +32,7 @@ func NewHealthyHandler(scaled *config.Scaled) *HealthyHandler {
 }
 
 func (h *HealthyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	logrus.Info("Start get setting")
 	backupTargetSetting, err := h.settingCache.Get(settings.BackupTargetSettingName)
 	if err != nil {
 		util.ResponseError(rw, http.StatusInternalServerError, fmt.Errorf("can't get %s setting, error: %w", settings.BackupTargetSettingName, err))
@@ -41,6 +43,7 @@ func (h *HealthyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logrus.Infof("Start decode backup-target %s", backupTargetSetting.Value)
 	target, err := settings.DecodeBackupTarget(backupTargetSetting.Value)
 	if err != nil {
 		util.ResponseError(rw, http.StatusInternalServerError, fmt.Errorf("can't decode %s setting %s, error: %w", settings.BackupTargetSettingName, backupTargetSetting.Value, err))
@@ -52,6 +55,7 @@ func (h *HealthyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	if target.Type == settings.S3BackupType {
+		logrus.Info("Start get s3 secret")
 		secret, err := h.secretCache.Get(util.LonghornSystemNamespaceName, util.BackupTargetSecretName)
 		if err != nil {
 			util.ResponseError(rw, http.StatusInternalServerError, fmt.Errorf("can't get backup target secret: %s/%s, error: %w", util.LonghornSystemNamespaceName, util.BackupTargetSecretName, err))
@@ -63,7 +67,9 @@ func (h *HealthyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		os.Setenv(backup.AWSCERT, string(secret.Data[backup.AWSCERT]))
 	}
 
+	logrus.Info("Start get backup store driver")
 	_, err = backupstore.GetBackupStoreDriver(backup.ConstructEndpoint(target))
+	logrus.Info("Already got backup store driver")
 	if err != nil {
 		util.ResponseError(rw, http.StatusServiceUnavailable, fmt.Errorf("can't connect to backup target %+v, error: %w", target, err))
 		return
