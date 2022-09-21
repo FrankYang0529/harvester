@@ -34,6 +34,37 @@ func createSecrets(mgmt *config.Management) error {
 				util.ContainerdRegistryFileName: []byte(""),
 			},
 		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: util.CattleSystemNamespaceName,
+				Name:      util.ContainerdRegistryUpdateScriptSecretName,
+			},
+			StringData: map[string]string{
+				util.ContainerdRegistryUpdateScriptName: `#!/bin/sh
+				RESTART=true
+				if [ -f "/etc/rancher/rke2/registries.yaml" ]; then
+					if [ cmp -s "/run/system-upgrade/secrets/registries/registries.yaml" "/etc/rancher/rke2/registries.yaml" ]; then
+					  RESTART=false
+					  echo "/etc/rancher/rke2/registries.yaml is not changed"
+					fi
+				else
+					echo "File /etc/rancher/rke2/registries.yaml doesn't exist"
+					if [ ! -s "/run/system-upgrade/secrets/registries/registries.yaml" ]; then
+					  RESTART=false
+					  echo "New registries.yaml is empty"
+					fi
+				fi
+				if [ "$RESTART" == true ]; then
+					echo "Update /etc/rancher/rke2 ..."
+					cp /run/system-upgrade/secrets/registries/registries.yaml /etc/rancher/rke2
+					echo "Restart RKE2 ..."
+					kill $(pgrep rke2)
+					echo "Done"
+				else
+					echo "Registry content doesn't change"
+				fi`,
+			},
+		},
 	}
 	for _, defaultSecret := range defaultSecrets {
 		if _, err := secrets.Create(&defaultSecret); err != nil && !apierrors.IsAlreadyExists(err) {

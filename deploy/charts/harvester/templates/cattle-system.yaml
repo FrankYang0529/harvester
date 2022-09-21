@@ -38,16 +38,11 @@ spec:
   serviceAccountName: system-upgrade-controller
   secrets:
     - name: harvester-containerd-registry
-      path: /registries
+      path: /host/run/system-upgrade/secrets/registries
+    - name: harvester-update-containerd-registry-script
+      path: /host/run/system-upgrade/secrets/scripts
   version: v1.1.0
   upgrade:
     image: {{ .Values.generalJob.image.repository }}:{{ .Values.generalJob.image.tag }}
-    command: ["/bin/sh", "-c"]
-    # We can't use systemctl in docker image.
-    # ref: https://stackoverflow.com/questions/49285658/how-to-solve-docker-issue-failed-to-connect-to-bus-no-such-file-or-directory
-    args:
-      - echo "Update /etc/rancher/rke2 ...";
-        cp /registries/registries.yaml /host/etc/rancher/rke2;
-        echo "Restart RKE2 ...";
-        chroot /host /bin/bash -c "kill $(pgrep rke2);"
-        echo "Done";
+    command: ["chroot", "/host"]
+    args: ["sh", "/run/system-upgrade/secrets/scripts/update_registries.sh"]
