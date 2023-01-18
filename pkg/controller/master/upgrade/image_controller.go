@@ -38,7 +38,7 @@ func (h *vmImageHandler) OnChanged(key string, image *harvesterv1.VirtualMachine
 	switch {
 	case harvesterv1.ImageImported.IsTrue(image):
 		setImageReadyCondition(toUpdate, corev1.ConditionTrue, "", "")
-	case harvesterv1.ImageImported.IsFalse(image):
+	case harvesterv1.ImageImported.IsFalse(image), harvesterv1.ImageRetryLimitExceeded.IsTrue(image):
 		setImageReadyCondition(toUpdate, corev1.ConditionFalse, harvesterv1.ImageImported.GetReason(image), harvesterv1.ImageImported.GetMessage(image))
 	default:
 		return image, nil

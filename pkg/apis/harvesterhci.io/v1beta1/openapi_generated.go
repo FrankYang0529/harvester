@@ -2930,8 +2930,15 @@ func schema_pkg_apis_harvesterhciio_v1beta1_VirtualMachineImageSpec(ref common.R
 							},
 						},
 					},
+					"retry": {
+						SchemaProps: spec.SchemaProps{
+							Default: 0,
+							Type:    []string{"integer"},
+							Format:  "int32",
+						},
+					},
 				},
-				Required: []string{"displayName", "sourceType"},
+				Required: []string{"displayName", "sourceType", "retry"},
 			},
 		},
 	}
@@ -2965,6 +2972,13 @@ func schema_pkg_apis_harvesterhciio_v1beta1_VirtualMachineImageStatus(ref common
 						SchemaProps: spec.SchemaProps{
 							Type:   []string{"string"},
 							Format: "",
+						},
+					},
+					"failed": {
+						SchemaProps: spec.SchemaProps{
+							Default: 0,
+							Type:    []string{"integer"},
+							Format:  "int32",
 						},
 					},
 					"conditions": {

@@ -120,6 +120,7 @@ func (r *UpgradeRepo) CreateImageFromISO(isoURL string, checksum string) (*harve
 			SourceType:  v1beta1.VirtualMachineImageSourceTypeDownload,
 			URL:         isoURL,
 			Checksum:    checksum,
+			Retry:       3,
 		},
 	}
 
