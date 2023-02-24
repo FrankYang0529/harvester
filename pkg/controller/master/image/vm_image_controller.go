@@ -184,7 +184,7 @@ func (h *vmImageHandler) createBackingImage(image *harvesterv1.VirtualMachineIma
 		}
 
 		bi.Spec.SourceParameters[lhcontroller.DataSourceTypeExportFromVolumeParameterVolumeName] = pvc.Spec.VolumeName
-		bi.Spec.SourceParameters[lhmanager.DataSourceTypeExportFromVolumeParameterExportType] = lhmanager.DataSourceTypeExportFromVolumeParameterExportTypeRAW
+		bi.Spec.SourceParameters[lhmanager.DataSourceTypeExportFromVolumeParameterExportType] = lhmanager.DataSourceTypeExportFromVolumeParameterExportTypeQCOW2
 	}
 
 	_, err := h.backingImages.Create(bi)
