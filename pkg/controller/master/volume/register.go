@@ -8,7 +8,7 @@ import (
 
 const (
 	volumeControllerDetachVolume = "detach-volume-controller"
-	podControllerAttachVolume    = "attach-volume-controller"
+	volumeControllerAttachVolume = "attach-volume-controller"
 )
 
 func Register(ctx context.Context, management *config.Management, options config.Options) error {
@@ -21,8 +21,8 @@ func Register(ctx context.Context, management *config.Management, options config
 		snapshotCache = management.SnapshotFactory.Snapshot().V1beta1().VolumeSnapshot().Cache()
 	)
 
-	// registers the volumecontroller
-	var volumeCtrl = &Controller{
+	// registers controllers
+	var detachCtrl = &DetachController{
 		podCache:         podCache,
 		podController:    podClient,
 		pvcCache:         pvcCache,
@@ -31,15 +31,11 @@ func Register(ctx context.Context, management *config.Management, options config
 		volumeCache:      volumeCache,
 		snapshotCache:    snapshotCache,
 	}
-	volumeClient.OnChange(ctx, volumeControllerDetachVolume, volumeCtrl.DetachVolumesOnChange)
-
-	// registers the podcontroller
-	var podCtrl = &PodController{
-		podController: podClient,
-		pvcCache:      pvcCache,
-		volumes:       volumeClient,
-		volumeCache:   volumeCache,
+	var attachCtrl = &AttachController{
+		volumes: volumeClient,
 	}
-	podClient.OnChange(ctx, podControllerAttachVolume, podCtrl.AttachVolumesOnChange)
+	volumeClient.OnChange(ctx, volumeControllerDetachVolume, detachCtrl.DetachVolumesOnChange)
+	volumeClient.OnChange(ctx, volumeControllerAttachVolume, attachCtrl.AttachVolumesOnChange)
+
 	return nil
 }

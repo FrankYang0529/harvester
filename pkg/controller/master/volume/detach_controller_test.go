@@ -153,7 +153,7 @@ func TestHandler_DetachVolumesOnChange(t *testing.T) {
 			assert.Nil(t, err, "mock resource should add into fake controller tracker")
 		}
 
-		var ctrl = &Controller{
+		var ctrl = &DetachController{
 			pvcCache:    fakeclients.PersistentVolumeClaimCache(k8sclientset.CoreV1().PersistentVolumeClaims),
 			volumeCache: fakeclients.LonghornVolumeCache(clientset.LonghornV1beta1().Volumes),
 		}
