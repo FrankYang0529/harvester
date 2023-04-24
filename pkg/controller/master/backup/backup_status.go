@@ -13,7 +13,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
-	kubevirtv1 "kubevirt.io/api/core/v1"
 
 	harvesterv1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
 	"github.com/harvester/harvester/pkg/util"
@@ -106,21 +105,19 @@ func (h *Handler) resolveVolSnapshotRef(namespace string, controllerRef *metav1.
 }
 
 // mountLonghornVolumes helps to mount the volumes to host if it is detached
-func (h *Handler) mountLonghornVolumes(vm *kubevirtv1.VirtualMachine) error {
-	for _, vol := range vm.Spec.Template.Spec.Volumes {
-		if vol.PersistentVolumeClaim == nil {
-			continue
-		}
-		name := vol.PersistentVolumeClaim.ClaimName
+func (h *Handler) mountLonghornVolumes(vmBackup *harvesterv1.VirtualMachineBackup) (bool, error) {
+	attachNewVolumes := false
+	for _, vb := range vmBackup.Status.VolumeBackups {
+		name := vb.PersistentVolumeClaim.ObjectMeta.Name
 
-		pvc, err := h.pvcCache.Get(vm.Namespace, name)
+		pvc, err := h.pvcCache.Get(vmBackup.Namespace, name)
 		if err != nil {
-			return fmt.Errorf("failed to get pvc %s/%s, error: %s", name, vm.Namespace, err.Error())
+			return attachNewVolumes, fmt.Errorf("failed to get pvc %s/%s, error: %s", vmBackup.Namespace, name, err.Error())
 		}
 
 		sc, err := h.storageClassCache.Get(*pvc.Spec.StorageClassName)
 		if err != nil {
-			return err
+			return attachNewVolumes, err
 		}
 		if sc.Provisioner != longhorntypes.LonghornDriverName {
 			continue
@@ -128,22 +125,23 @@ func (h *Handler) mountLonghornVolumes(vm *kubevirtv1.VirtualMachine) error {
 
 		volume, err := h.volumeCache.Get(util.LonghornSystemNamespaceName, pvc.Spec.VolumeName)
 		if err != nil {
-			return fmt.Errorf("failed to get volume %s/%s, error: %s", name, vm.Namespace, err.Error())
+			return attachNewVolumes, fmt.Errorf("failed to get volume %s/%s, error: %s", util.LonghornSystemNamespaceName, pvc.Spec.VolumeName, err.Error())
 		}
 
 		volCpy := volume.DeepCopy()
 		if volume.Status.State == lhv1beta1.VolumeStateDetached || volume.Status.State == lhv1beta1.VolumeStateDetaching {
+			attachNewVolumes = true
 			volCpy.Spec.NodeID = volume.Status.OwnerID
 		}
 
 		if !reflect.DeepEqual(volCpy, volume) {
 			logrus.Infof("mount detached volume %s to the node %s", volCpy.Name, volCpy.Spec.NodeID)
 			if _, err = h.volumes.Update(volCpy); err != nil {
-				return err
+				return attachNewVolumes, err
 			}
 		}
 	}
-	return nil
+	return attachNewVolumes, nil
 }
 
 func getVolumeSnapshotContentName(volumeBackup harvesterv1.VolumeBackup) string {

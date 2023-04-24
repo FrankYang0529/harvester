@@ -55,6 +55,8 @@ const (
 	backupTargetAnnotation       = "backup.harvesterhci.io/backup-target"
 	backupBucketNameAnnotation   = "backup.harvesterhci.io/bucket-name"
 	backupBucketRegionAnnotation = "backup.harvesterhci.io/bucket-region"
+
+	reconcileVMBackupInterval = 5 * time.Second
 )
 
 var vmBackupKind = harvesterv1.SchemeGroupVersion.WithKind(vmBackupKindName)
@@ -146,14 +148,14 @@ func (h *Handler) OnBackupChange(key string, vmBackup *harvesterv1.VirtualMachin
 			return nil, h.setStatusError(vmBackup, err)
 		}
 
-		// check if the VM is running, if not make sure the volumes are mounted to the host
-		if !sourceVM.Status.Ready || !sourceVM.Status.Created {
-			// mount volumes after creating VolumeSnapshots, so detaching volumes controller doesn't detach the volumes
-			if err := h.mountLonghornVolumes(sourceVM); err != nil {
-				return nil, h.setStatusError(vmBackup, err)
-			}
-		}
 		return nil, nil
+	}
+
+	if attachNewVolumes, err := h.mountLonghornVolumes(vmBackup); err != nil {
+		return vmBackup, h.setStatusError(vmBackup, err)
+	} else if attachNewVolumes {
+		h.vmBackupController.EnqueueAfter(vmBackup.Namespace, vmBackup.Name, reconcileVMBackupInterval)
+		return vmBackup, nil
 	}
 
 	// TODO, make sure status is initialized, and "Lock" the source VM by adding a finalizer and setting snapshotInProgress in status
@@ -457,7 +459,7 @@ func (h *Handler) reconcileVolumeSnapshots(vmBackup *harvesterv1.VirtualMachineB
 			logrus.Debugf("volumeSnapshot %s/%s is being deleted, requeue vm backup %s/%s again",
 				volumeSnapshot.Namespace, volumeSnapshot.Name,
 				vmBackup.Namespace, vmBackup.Name)
-			h.vmBackupController.EnqueueAfter(vmBackup.Namespace, vmBackup.Name, 5*time.Second)
+			h.vmBackupController.EnqueueAfter(vmBackup.Namespace, vmBackup.Name, reconcileVMBackupInterval)
 			return nil
 		}
 
@@ -474,8 +476,11 @@ func (h *Handler) reconcileVolumeSnapshots(vmBackup *harvesterv1.VirtualMachineB
 			vmBackupCpy.Status.VolumeBackups[i].ReadyToUse = volumeSnapshot.Status.ReadyToUse
 			vmBackupCpy.Status.VolumeBackups[i].CreationTime = volumeSnapshot.Status.CreationTime
 			vmBackupCpy.Status.VolumeBackups[i].Error = translateError(volumeSnapshot.Status.Error)
-		}
 
+			if volumeSnapshot.Status.ReadyToUse == nil || !*volumeSnapshot.Status.ReadyToUse {
+				h.vmBackupController.EnqueueAfter(vmBackup.Namespace, vmBackup.Name, reconcileVMBackupInterval)
+			}
+		}
 	}
 
 	if !reflect.DeepEqual(vmBackup.Status, vmBackupCpy.Status) {
