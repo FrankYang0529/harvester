@@ -16,7 +16,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	ctllonghornv1 "github.com/harvester/harvester/pkg/generated/controllers/longhorn.io/v1beta2"
 	ctlsnapshotv1 "github.com/harvester/harvester/pkg/generated/controllers/snapshot.storage.k8s.io/v1"
 	"github.com/harvester/harvester/pkg/util"
 )
@@ -24,8 +23,6 @@ import (
 type ActionHandler struct {
 	pvcs              ctlcorev1.PersistentVolumeClaimClient
 	pvcCache          ctlcorev1.PersistentVolumeClaimCache
-	volumes           ctllonghornv1.VolumeClient
-	volumeCache       ctllonghornv1.VolumeCache
 	snapshotCache     ctlsnapshotv1.VolumeSnapshotCache
 	storageClassCache ctlstoragev1.StorageClassCache
 }

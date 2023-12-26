@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v4/apis/volumesnapshot/v1"
 	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	"github.com/rancher/steve/pkg/server"
 	corev1 "k8s.io/api/core/v1"
@@ -18,17 +17,15 @@ import (
 )
 
 const (
-	PVCByVMIndex                       = "harvesterhci.io/pvc-by-vm-index"
-	PVCByDataSourceVolumeSnapshotIndex = "harvesterhci.io/pvc-by-data-source-volume-snapshot"
-	VMByNetworkIndex                   = "vm.harvesterhci.io/vm-by-network"
-	PodByNodeNameIndex                 = "harvesterhci.io/pod-by-nodename"
-	PodByPVCIndex                      = "harvesterhci.io/pod-by-pvc"
-	PodByVMNameIndex                   = "harvesterhci.io/pod-by-vmname"
-	VolumeByNodeIndex                  = "harvesterhci.io/volume-by-node"
-	VMBackupBySourceVMUIDIndex         = "harvesterhci.io/vmbackup-by-source-vm-uid"
-	VMBackupBySourceVMNameIndex        = "harvesterhci.io/vmbackup-by-source-vm-name"
-	VMTemplateVersionByImageIDIndex    = "harvesterhci.io/vmtemplateversion-by-image-id"
-	VolumeSnapshotBySourcePVCIndex     = "harvesterhci.io/volumesnapshot-by-source-pvc"
+	PVCByVMIndex                    = "harvesterhci.io/pvc-by-vm-index"
+	VMByNetworkIndex                = "vm.harvesterhci.io/vm-by-network"
+	PodByNodeNameIndex              = "harvesterhci.io/pod-by-nodename"
+	PodByPVCIndex                   = "harvesterhci.io/pod-by-pvc"
+	PodByVMNameIndex                = "harvesterhci.io/pod-by-vmname"
+	VolumeByNodeIndex               = "harvesterhci.io/volume-by-node"
+	VMBackupBySourceVMUIDIndex      = "harvesterhci.io/vmbackup-by-source-vm-uid"
+	VMBackupBySourceVMNameIndex     = "harvesterhci.io/vmbackup-by-source-vm-name"
+	VMTemplateVersionByImageIDIndex = "harvesterhci.io/vmtemplateversion-by-image-id"
 )
 
 func Setup(ctx context.Context, server *server.Server, controllers *server.Controllers, options config.Options) error {
@@ -37,7 +34,6 @@ func Setup(ctx context.Context, server *server.Server, controllers *server.Contr
 
 	pvcInformer := management.CoreFactory.Core().V1().PersistentVolumeClaim().Cache()
 	pvcInformer.AddIndexer(PVCByVMIndex, pvcByVM)
-	pvcInformer.AddIndexer(PVCByDataSourceVolumeSnapshotIndex, pvcByDataSourceVolumeSnapshot)
 
 	podInformer := management.CoreFactory.Core().V1().Pod().Cache()
 	podInformer.AddIndexer(PodByNodeNameIndex, PodByNodeName)
@@ -46,9 +42,6 @@ func Setup(ctx context.Context, server *server.Server, controllers *server.Contr
 
 	volumeInformer := management.LonghornFactory.Longhorn().V1beta2().Volume().Cache()
 	volumeInformer.AddIndexer(VolumeByNodeIndex, VolumeByNodeName)
-
-	volumeSnapshotInformer := management.SnapshotFactory.Snapshot().V1().VolumeSnapshot().Cache()
-	volumeSnapshotInformer.AddIndexer(VolumeSnapshotBySourcePVCIndex, volumeSnapshotBySourcePVC)
 
 	vmBackupInformer := management.HarvesterFactory.Harvesterhci().V1beta1().VirtualMachineBackup().Cache()
 	vmBackupInformer.AddIndexer(VMBackupBySourceVMNameIndex, VMBackupBySourceVMName)
@@ -101,13 +94,6 @@ func PodByVMName(obj *corev1.Pod) ([]string, error) {
 	return []string{fmt.Sprintf("%s/%s", obj.Namespace, vmName)}, nil
 }
 
-func pvcByDataSourceVolumeSnapshot(obj *corev1.PersistentVolumeClaim) ([]string, error) {
-	if obj.Spec.DataSource == nil || obj.Spec.DataSource.Kind != "VolumeSnapshot" {
-		return []string{}, nil
-	}
-	return []string{fmt.Sprintf("%s/%s", obj.Namespace, obj.Spec.DataSource.Name)}, nil
-}
-
 func VMBackupBySourceVMUID(obj *harvesterv1.VirtualMachineBackup) ([]string, error) {
 	if obj.Status == nil || obj.Status.SourceUID == nil {
 		return []string{}, nil
@@ -139,13 +125,6 @@ func VMTemplateVersionByImageID(obj *harvesterv1.VirtualMachineTemplateVersion) 
 		imageIds = append(imageIds, imageID)
 	}
 	return imageIds, nil
-}
-
-func volumeSnapshotBySourcePVC(obj *snapshotv1.VolumeSnapshot) ([]string, error) {
-	if obj.Spec.Source.PersistentVolumeClaimName == nil {
-		return []string{}, nil
-	}
-	return []string{fmt.Sprintf("%s/%s", obj.Namespace, *obj.Spec.Source.PersistentVolumeClaimName)}, nil
 }
 
 func VolumeByNodeName(obj *lhv1beta2.Volume) ([]string, error) {

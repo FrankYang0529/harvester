@@ -79,8 +79,6 @@ type RestoreHandler struct {
 	snapshotContents     ctlsnapshotv1.VolumeSnapshotContentClient
 	snapshotContentCache ctlsnapshotv1.VolumeSnapshotContentCache
 	lhbackupCache        ctllhv1.BackupCache
-	volumeCache          ctllhv1.VolumeCache
-	volumes              ctllhv1.VolumeClient
 
 	recorder   record.EventRecorder
 	restClient *rest.RESTClient
@@ -96,7 +94,6 @@ func RegisterRestore(ctx context.Context, management *config.Management, opts co
 	snapshots := management.SnapshotFactory.Snapshot().V1().VolumeSnapshot()
 	snapshotContents := management.SnapshotFactory.Snapshot().V1().VolumeSnapshotContent()
 	lhbackups := management.LonghornFactory.Longhorn().V1beta2().Backup()
-	volumes := management.LonghornFactory.Longhorn().V1beta2().Volume()
 
 	copyConfig := rest.CopyConfig(management.RestConfig)
 	copyConfig.GroupVersion = &k8sschema.GroupVersion{Group: kubevirtv1.SubresourceGroupName, Version: kubevirtv1.ApiLatestVersion}
@@ -125,8 +122,6 @@ func RegisterRestore(ctx context.Context, management *config.Management, opts co
 		snapshotContents:     snapshotContents,
 		snapshotContentCache: snapshotContents.Cache(),
 		lhbackupCache:        lhbackups.Cache(),
-		volumes:              volumes,
-		volumeCache:          volumes.Cache(),
 		recorder:             management.NewRecorder(restoreControllerName, "", ""),
 		restClient:           restClient,
 	}

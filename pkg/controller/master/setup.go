@@ -34,7 +34,6 @@ var registerFuncs = []registerFunc{
 	node.PromoteRegister,
 	node.MaintainRegister,
 	node.DownRegister,
-	node.VolumeDetachRegister,
 	setting.Register,
 	template.Register,
 	virtualmachine.Register,
