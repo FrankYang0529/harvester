@@ -206,7 +206,7 @@ func (v *restoreValidator) checkBackup(vmRestore *v1beta1.VirtualMachineRestore,
 		return err
 	}
 
-	if vmRestore.Spec.DeletionPolicy == v1beta1.VirtualMachineRestoreRetain {
+	if (vmRestore.Spec.DeletionPolicy == v1beta1.VirtualMachineRestoreRetain) || (vmRestore.Spec.DeletionPolicy == "") {
 		return nil
 	}
 
