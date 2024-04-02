@@ -1,7 +1,12 @@
 FROM registry.suse.com/bci/bci-base:15.5
 
+ARG TARGETPLATFORM
 ARG ARCH=amd64
 ENV ARCH=${ARCH}
+RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then ARCH=amd64; \
+    elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then ARCH=arm64; \
+    else echo "Platform $TARGETPLATFORM is not supported" && exit 1; fi
+
 RUN zypper rm -y container-suseconnect && \
     zypper --no-gpg-checks ref && \
     zypper in -y curl e2fsprogs rsync awk zstd jq helm zip unzip nginx && zypper clean -a
@@ -22,4 +27,4 @@ COPY patch_99_custom.sh /usr/local/bin
 COPY extra_manifests /usr/local/share/extra_manifests
 COPY migrations /usr/local/share/migrations
 COPY addons /usr/local/share/addons
-COPY upgrade-helper /usr/local/bin/
+COPY upgrade-helper-${ARCH} /usr/local/bin/upgrade-helper

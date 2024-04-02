@@ -10,7 +10,7 @@ source $SCRIPTS_DIR/version
 cd $TOP_DIR
 
 mkdir -p dist/artifacts
-cp bin/harvester dist/artifacts/harvester${SUFFIX}
+cp bin/harvester-* dist/artifacts/
 
 cd $PACKAGE_DIR
 
@@ -21,7 +21,7 @@ if [ -e ${DOCKERFILE}.${ARCH} ]; then
 fi
 
 rm -rf ./harvester
-cp ../bin/harvester .
+cp ../bin/harvester-* .
 
 docker build --build-arg VERSION=${VERSION} --build-arg ARCH=${ARCH} -f ${DOCKERFILE} -t ${IMAGE} .
 echo Built ${IMAGE}

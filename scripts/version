@@ -51,9 +51,7 @@ if [ -z "$ARCH" ]; then
     ARCH=$(go env GOHOSTARCH)
 fi
 
-SUFFIX="-${ARCH}"
-
-TAG=${TAG:-${VERSION}${SUFFIX}}
+TAG=${TAG:-${VERSION}}
 REPO=${REPO:-rancher}
 
 if echo $TAG | grep -q dirty; then
@@ -64,7 +62,6 @@ echo "ARCH: $ARCH"
 echo "VERSION: $VERSION"
 echo "CHART_VERSION: $CHART_VERSION"
 echo "APP_VERSION: $APP_VERSION"
-echo "SUFFIX: $SUFFIX"
 echo "REPO: $REPO"
 echo "TAG: $TAG"
 echo "IMAGE_PUSH_TAG: $IMAGE_PUSH_TAG"

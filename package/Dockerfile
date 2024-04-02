@@ -17,16 +17,16 @@ ENV HARVESTER_API_UI_VERSION 1.1.9
 
 ENV HARVESTER_UI_PLUGIN_BUNDLED_VERSION latest
 
+ARG TARGETPLATFORM
 ARG ARCH=amd64
 ARG VERSION=dev
 ENV HARVESTER_SERVER_VERSION ${VERSION}
 ENV TINI_VERSION v0.19.0
-ENV TINI_URL_amd64=https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini \
-    TINI_URL_arm64=https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini-arm64 \
-    TINI_URL_s390x=https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini-s390x \
-    TINI_URL=TINI_URL_${ARCH}
+RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then ARCH=amd64; \
+    elif [ "$TARGETPLATFORM" = "linux/arm64" ]; then ARCH=arm64; \
+    else echo "Platform $TARGETPLATFORM is not supported" && exit 1; fi
 
-RUN curl -sLf ${!TINI_URL} > /usr/bin/tini && chmod +x /usr/bin/tini
+RUN curl -sL https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini-${ARCH} > /usr/bin/tini && chmod +x /usr/bin/tini
 
 RUN mkdir -p /usr/share/harvester/harvester && \
     cd /usr/share/harvester/harvester && \
@@ -39,7 +39,8 @@ RUN mkdir -p /usr/share/harvester/harvester && \
     curl -sL https://releases.rancher.com/harvester-ui/plugin/harvester-${HARVESTER_UI_PLUGIN_BUNDLED_VERSION}.tar.gz | tar xvzf - --strip-components=1 && \
     cd /var/lib/harvester/harvester
 
-COPY entrypoint.sh harvester /usr/bin/
+COPY entrypoint.sh /usr/bin/
+COPY harvester-${ARCH} /usr/bin/harvester
 RUN chmod +x /usr/bin/entrypoint.sh
 
 VOLUME /var/lib/harvester/harvester

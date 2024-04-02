@@ -10,7 +10,7 @@ source $SCRIPTS_DIR/version
 cd $TOP_DIR
 
 mkdir -p dist/artifacts
-cp bin/harvester-webhook dist/artifacts/harvester-webhook${SUFFIX}
+cp bin/harvester-webhook-* dist/artifacts/
 
 cd $PACKAGE_DIR
 
@@ -20,7 +20,7 @@ if [ -e ${DOCKERFILE}.${ARCH} ]; then
     DOCKERFILE=${DOCKERFILE}.${ARCH}
 fi
 
-cp ../bin/harvester-webhook .
+cp ../bin/harvester-webhook-* .
 
 docker build -f ${DOCKERFILE} --build-arg ARCH=${ARCH} -t ${IMAGE} .
 echo Built ${IMAGE}
