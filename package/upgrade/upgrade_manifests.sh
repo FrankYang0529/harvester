@@ -222,6 +222,7 @@ get_cluster_repo_index_download_time() {
 }
 
 upgrade_rancher() {
+  echo_harvester_managedchart_version "Before upgrading Rancher"
   echo "Upgrading Rancher"
 
   mkdir -p $UPGRADE_TMP_DIR/images
@@ -265,6 +266,7 @@ upgrade_rancher() {
   REPO_RANCHER_VERSION=$REPO_RANCHER_VERSION yq -e e '.rancherImageTag = strenv(REPO_RANCHER_VERSION)' values.yaml -i
   ./helm upgrade rancher ./*.tgz --namespace cattle-system -f values.yaml --wait
 
+  echo_harvester_managedchart_version "After upgrading Rancher"
   # Wait until new version ready
   until [ "$(get_running_rancher_version)" = "$REPO_RANCHER_VERSION" ]; do
     echo "Wait for Rancher to be upgraded..."
@@ -286,6 +288,7 @@ upgrade_rancher() {
   patch_fleet_cluster
   wait_for_fleet_agent $pre_patch_timestamp
   wait_rollout cattle-fleet-local-system deployment fleet-agent
+  echo_harvester_managedchart_version "Upgrading Rancher is done"
 }
 
 update_local_rke_state_secret() {
@@ -415,9 +418,16 @@ modify_nad_bridge() {
       done
 }
 
+echo_harvester_managedchart_version() {
+  prelog=$1
+
+  echo "${prelog}, generation: $(kubectl get managedcharts.management.cattle.io harvester -n fleet-local -o=jsonpath='{.metadata.generation}'), observedGeneration: $(kubectl get managedcharts.management.cattle.io harvester -n fleet-local -o=jsonpath='{.status.observedGeneration}')"
+}
+
 upgrade_harvester() {
   echo "Upgrading Harvester"
 
+  echo_harvester_managedchart_version "Before upgrade"
   pre_generation_harvester=$(kubectl get managedcharts.management.cattle.io harvester -n fleet-local -o=jsonpath='{.status.observedGeneration}')
   pre_generation_harvester_crd=$(kubectl get managedcharts.management.cattle.io harvester-crd -n fleet-local -o=jsonpath='{.status.observedGeneration}')
 
@@ -447,9 +457,12 @@ EOF
       yq e '.spec.values.storageClass.defaultStorageClass = false' -i harvester.yaml
   fi
 
+  echo_harvester_managedchart_version "Before apply harvester.yaml"
   kubectl apply -f ./harvester.yaml
+  echo_harvester_managedchart_version "After apply harvester.yaml"
 
   pause_managed_chart harvester "false"
+  echo_harvester_managedchart_version "After unpause harvester"
   pause_managed_chart harvester-crd "false"
 
   wait_managed_chart fleet-local harvester $REPO_HARVESTER_CHART_VERSION $pre_generation_harvester ready
