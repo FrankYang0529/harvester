@@ -7,8 +7,8 @@ import (
 	loggingv1 "github.com/kube-logging/logging-operator/pkg/sdk/logging/api/v1beta1"
 	"github.com/kube-logging/logging-operator/pkg/sdk/logging/model/filter"
 	"github.com/kube-logging/logging-operator/pkg/sdk/logging/model/output"
-	"github.com/rancher/fleet/pkg/apis/fleet.cattle.io/v1alpha1"
-	mgmtv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
+
+	// mgmtv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	"github.com/rancher/wrangler/pkg/name"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -60,39 +60,6 @@ func preparePvc(upgradeLog *harvesterv1.UpgradeLog) *corev1.PersistentVolumeClai
 				},
 			},
 			VolumeMode: &volumeMode,
-		},
-	}
-}
-
-func prepareOperator(upgradeLog *harvesterv1.UpgradeLog) *mgmtv3.ManagedChart {
-	operatorName := name.SafeConcatName(upgradeLog.Name, util.UpgradeLogOperatorComponent)
-	return &mgmtv3.ManagedChart{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				util.LabelUpgradeLog:          upgradeLog.Name,
-				util.LabelUpgradeLogComponent: util.UpgradeLogOperatorComponent,
-			},
-			Name:      operatorName,
-			Namespace: util.FleetLocalNamespaceName,
-		},
-		Spec: mgmtv3.ManagedChartSpec{
-			Chart:            util.RancherLoggingName,
-			ReleaseName:      operatorName,
-			DefaultNamespace: util.CattleLoggingSystemNamespaceName,
-			RepoName:         "harvester-charts",
-			Targets: []v1alpha1.BundleTarget{
-				{
-					ClusterName: "local",
-					ClusterSelector: &metav1.LabelSelector{
-						MatchExpressions: []metav1.LabelSelectorRequirement{
-							{
-								Key:      "provisioning.cattle.io/unmanaged-system-agent",
-								Operator: metav1.LabelSelectorOpDoesNotExist,
-							},
-						},
-					},
-				},
-			},
 		},
 	}
 }
@@ -780,38 +747,38 @@ func (p *loggingBuilder) Build() *loggingv1.Logging {
 	return p.logging
 }
 
-type managedChartBuilder struct {
-	managedChart *mgmtv3.ManagedChart
-}
+// type managedChartBuilder struct {
+// 	managedChart *mgmtv3.ManagedChart
+// }
 
-func newManagedChartBuilder(name string) *managedChartBuilder {
-	return &managedChartBuilder{
-		managedChart: &mgmtv3.ManagedChart{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: util.FleetLocalNamespaceName,
-			},
-		},
-	}
-}
+// func newManagedChartBuilder(name string) *managedChartBuilder {
+// 	return &managedChartBuilder{
+// 		managedChart: &mgmtv3.ManagedChart{
+// 			ObjectMeta: metav1.ObjectMeta{
+// 				Name:      name,
+// 				Namespace: util.FleetLocalNamespaceName,
+// 			},
+// 		},
+// 	}
+// }
 
-func (p *managedChartBuilder) WithLabel(key, value string) *managedChartBuilder {
-	if p.managedChart.Labels == nil {
-		p.managedChart.Labels = make(map[string]string, 1)
-	}
-	p.managedChart.Labels[key] = value
-	return p
-}
+// func (p *managedChartBuilder) WithLabel(key, value string) *managedChartBuilder {
+// 	if p.managedChart.Labels == nil {
+// 		p.managedChart.Labels = make(map[string]string, 1)
+// 	}
+// 	p.managedChart.Labels[key] = value
+// 	return p
+// }
 
-func (p *managedChartBuilder) Ready() *managedChartBuilder {
-	p.managedChart.Status.Summary.DesiredReady = 1
-	p.managedChart.Status.Summary.Ready = 1
-	return p
-}
+// func (p *managedChartBuilder) Ready() *managedChartBuilder {
+// 	p.managedChart.Status.Summary.DesiredReady = 1
+// 	p.managedChart.Status.Summary.Ready = 1
+// 	return p
+// }
 
-func (p *managedChartBuilder) Build() *mgmtv3.ManagedChart {
-	return p.managedChart
-}
+// func (p *managedChartBuilder) Build() *mgmtv3.ManagedChart {
+// 	return p.managedChart
+// }
 
 type pvcBuilder struct {
 	pvc *corev1.PersistentVolumeClaim

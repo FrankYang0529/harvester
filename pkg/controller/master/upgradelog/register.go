@@ -29,7 +29,6 @@ func Register(ctx context.Context, management *config.Management, options config
 	deploymentController := management.AppsFactory.Apps().V1().Deployment()
 	jobController := management.BatchFactory.Batch().V1().Job()
 	loggingController := management.LoggingFactory.Logging().V1beta1().Logging()
-	managedChartController := management.RancherManagementFactory.Management().V3().ManagedChart()
 	pvcController := management.CoreFactory.Core().V1().PersistentVolumeClaim()
 	serviceController := management.CoreFactory.Core().V1().Service()
 	statefulSetController := management.AppsFactory.Apps().V1().StatefulSet()
@@ -48,8 +47,6 @@ func Register(ctx context.Context, management *config.Management, options config
 		jobClient:           jobController,
 		jobCache:            jobController.Cache(),
 		loggingClient:       loggingController,
-		managedChartClient:  managedChartController,
-		managedChartCache:   managedChartController.Cache(),
 		pvcClient:           pvcController,
 		serviceClient:       serviceController,
 		statefulSetClient:   statefulSetController,
@@ -68,7 +65,7 @@ func Register(ctx context.Context, management *config.Management, options config
 	deploymentController.OnChange(ctx, deploymentControllerName, handler.OnDeploymentChange)
 	jobController.OnChange(ctx, jobControllerName, handler.OnJobChange)
 	statefulSetController.OnChange(ctx, statefulSetControllerName, handler.OnStatefulSetChange)
-	managedChartController.OnChange(ctx, managedChartControllerName, handler.OnManagedChartChange)
+	// managedChartController.OnChange(ctx, managedChartControllerName, handler.OnManagedChartChange)
 	upgradeController.OnChange(ctx, upgradeControllerName, handler.OnUpgradeChange)
 
 	return nil

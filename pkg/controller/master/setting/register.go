@@ -23,7 +23,6 @@ func Register(ctx context.Context, management *config.Management, options config
 	services := management.CoreFactory.Core().V1().Service()
 	lhs := management.LonghornFactory.Longhorn().V1beta2().Setting()
 	apps := management.CatalogFactory.Catalog().V1().App()
-	managedCharts := management.RancherManagementFactory.Management().V3().ManagedChart()
 	ingresses := management.NetworkingFactory.Networking().V1().Ingress()
 	helmChartConfigs := management.HelmFactory.Helm().V1().HelmChartConfig()
 	nodeConfigs := management.NodeConfigFactory.Node().V1beta1().NodeConfig()
@@ -50,8 +49,6 @@ func Register(ctx context.Context, management *config.Management, options config
 		configmapCache:       configmaps.Cache(),
 		serviceCache:         services.Cache(),
 		apps:                 apps,
-		managedCharts:        managedCharts,
-		managedChartCache:    managedCharts.Cache(),
 		helmChartConfigs:     helmChartConfigs,
 		helmChartConfigCache: helmChartConfigs.Cache(),
 		nodeConfigs:          nodeConfigs,
@@ -74,24 +71,22 @@ func Register(ctx context.Context, management *config.Management, options config
 	}
 
 	syncers = map[string]syncerFunc{
-		"additional-ca":             controller.syncAdditionalTrustedCAs,
-		"cluster-registration-url":  controller.registerCluster,
-		"http-proxy":                controller.syncHTTPProxy,
-		"log-level":                 controller.setLogLevel,
-		"overcommit-config":         controller.syncOvercommitConfig,
-		"vip-pools":                 controller.syncVipPoolsConfig,
-		"auto-disk-provision-paths": controller.syncNDMAutoProvisionPaths,
-		"ssl-certificates":          controller.syncSSLCertificate,
-		"ssl-parameters":            controller.syncSSLParameters,
-		"containerd-registry":       controller.syncContainerdRegistry,
-		"ntp-servers":               controller.syncNTPServer,
-		"auto-rotate-rke2-certs":    controller.syncAutoRotateRKE2Certs,
+		"additional-ca":            controller.syncAdditionalTrustedCAs,
+		"cluster-registration-url": controller.registerCluster,
+		"http-proxy":               controller.syncHTTPProxy,
+		"log-level":                controller.setLogLevel,
+		"overcommit-config":        controller.syncOvercommitConfig,
+		"vip-pools":                controller.syncVipPoolsConfig,
+		"ssl-certificates":         controller.syncSSLCertificate,
+		"ssl-parameters":           controller.syncSSLParameters,
+		"containerd-registry":      controller.syncContainerdRegistry,
+		"ntp-servers":              controller.syncNTPServer,
+		"auto-rotate-rke2-certs":   controller.syncAutoRotateRKE2Certs,
 		harvSettings.KubeconfigDefaultTokenTTLMinutesSettingName: controller.syncKubeconfigTTL,
 		// for "backup-target" syncer, please check harvester-backup-target-controller
 		// for "storage-network" syncer, please check harvester-storage-network-controller
 	}
 
 	settings.OnChange(ctx, controllerName, controller.settingOnChanged)
-	apps.OnChange(ctx, controllerName, controller.appOnChanged)
 	return nil
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/mitchellh/mapstructure"
 	mgmtv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	ctlcatalogv1 "github.com/rancher/rancher/pkg/generated/controllers/catalog.cattle.io/v1"
-	ctlmgmtv3 "github.com/rancher/rancher/pkg/generated/controllers/management.cattle.io/v3"
 	ctlappsv1 "github.com/rancher/wrangler/pkg/generated/controllers/apps/v1"
 	ctlbatchv1 "github.com/rancher/wrangler/pkg/generated/controllers/batch/v1"
 	ctlcorev1 "github.com/rancher/wrangler/pkg/generated/controllers/core/v1"
@@ -58,8 +57,6 @@ type handler struct {
 	jobClient           ctlbatchv1.JobClient
 	jobCache            ctlbatchv1.JobCache
 	loggingClient       ctlloggingv1.LoggingClient
-	managedChartClient  ctlmgmtv3.ManagedChartClient
-	managedChartCache   ctlmgmtv3.ManagedChartCache
 	pvcClient           ctlcorev1.PersistentVolumeClaimClient
 	serviceClient       ctlcorev1.ServiceClient
 	statefulSetClient   ctlappsv1.StatefulSetClient
@@ -115,27 +112,7 @@ func (h *handler) OnUpgradeLogChange(_ string, upgradeLog *harvesterv1.UpgradeLo
 			logrus.Info("rancher-logging Addon is not enabled")
 		}
 
-		// Detect the rancher-logging ManagedChart
-		managedChart, err := h.managedChartCache.Get(util.FleetLocalNamespaceName, util.RancherLoggingName)
-		if err != nil {
-			if !apierrors.IsNotFound(err) {
-				return nil, err
-			}
-			logrus.Info("rancher-logging ManagedChart is not installed")
-		} else {
-			if managedChart.Status.Summary.DesiredReady > 0 && managedChart.Status.Summary.DesiredReady == managedChart.Status.Summary.Ready {
-				setOperatorDeployedCondition(toUpdate, corev1.ConditionTrue, "Skipped", "rancher-logging ManagedChart is ready")
-				return h.upgradeLogClient.Update(toUpdate)
-			}
-			logrus.Warn("rancher-logging ManagedChart is not ready")
-			return nil, err
-		}
-
-		// If none of the above exists, install the customized rancher-logging ManagedChart
 		logrus.Info("Deploy logging-operator")
-		if _, err := h.managedChartClient.Create(prepareOperator(upgradeLog)); err != nil && !apierrors.IsAlreadyExists(err) {
-			return nil, err
-		}
 
 		return h.upgradeLogClient.Update(toUpdate)
 	}
@@ -673,11 +650,6 @@ func (h *handler) stopCollect(upgradeLog *harvesterv1.UpgradeLog) error {
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	err = h.managedChartClient.Delete(util.FleetLocalNamespaceName, name.SafeConcatName(upgradeLog.Name, util.UpgradeLogOperatorComponent), &metav1.DeleteOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
-		return err
-	}
-
 	return nil
 }
 
@@ -699,10 +671,10 @@ func (h *handler) cleanup(upgradeLog *harvesterv1.UpgradeLog) error {
 
 	// Remove the ManagedChart if the UpgradeLog resource is deleted before normal tear down
 	logrus.Info("Removing logging-operator ManagedChart if any")
-	err = h.managedChartClient.Delete(util.FleetLocalNamespaceName, name.SafeConcatName(upgradeLog.Name, util.UpgradeLogOperatorComponent), &metav1.DeleteOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
-		return err
-	}
+	// err = h.managedChartClient.Delete(util.FleetLocalNamespaceName, name.SafeConcatName(upgradeLog.Name, util.UpgradeLogOperatorComponent), &metav1.DeleteOptions{})
+	// if err != nil && !apierrors.IsNotFound(err) {
+	// 	return err
+	// }
 
 	return nil
 }

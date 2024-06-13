@@ -10,8 +10,6 @@ import (
 
 	"github.com/docker/go-units"
 	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
-	fleetv1alpha1 "github.com/rancher/fleet/pkg/apis/fleet.cattle.io/v1alpha1"
-	mgmtv3 "github.com/rancher/rancher/pkg/generated/controllers/management.cattle.io/v3"
 	v1 "github.com/rancher/wrangler/pkg/generated/controllers/core/v1"
 	"github.com/sirupsen/logrus"
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
@@ -54,39 +52,37 @@ func NewValidator(
 	lhVolumes ctllhv1.VolumeCache,
 	clusters ctlclusterv1.ClusterCache,
 	machines ctlclusterv1.MachineCache,
-	managedChartCache mgmtv3.ManagedChartCache,
+	// managedChartCache mgmtv3.ManagedChartCache,
 	versionCache ctlharvesterv1.VersionCache,
 	vmiCache ctlkubevirtv1.VirtualMachineInstanceCache,
 	httpClient *http.Client,
 	bearToken string,
 ) types.Validator {
 	return &upgradeValidator{
-		upgrades:          upgrades,
-		nodes:             nodes,
-		lhVolumes:         lhVolumes,
-		clusters:          clusters,
-		machines:          machines,
-		managedChartCache: managedChartCache,
-		versionCache:      versionCache,
-		vmiCache:          vmiCache,
-		httpClient:        httpClient,
-		bearToken:         bearToken,
+		upgrades:     upgrades,
+		nodes:        nodes,
+		lhVolumes:    lhVolumes,
+		clusters:     clusters,
+		machines:     machines,
+		versionCache: versionCache,
+		vmiCache:     vmiCache,
+		httpClient:   httpClient,
+		bearToken:    bearToken,
 	}
 }
 
 type upgradeValidator struct {
 	types.DefaultValidator
 
-	upgrades          ctlharvesterv1.UpgradeCache
-	nodes             v1.NodeCache
-	lhVolumes         ctllhv1.VolumeCache
-	clusters          ctlclusterv1.ClusterCache
-	machines          ctlclusterv1.MachineCache
-	managedChartCache mgmtv3.ManagedChartCache
-	versionCache      ctlharvesterv1.VersionCache
-	vmiCache          ctlkubevirtv1.VirtualMachineInstanceCache
-	httpClient        *http.Client
-	bearToken         string
+	upgrades     ctlharvesterv1.UpgradeCache
+	nodes        v1.NodeCache
+	lhVolumes    ctllhv1.VolumeCache
+	clusters     ctlclusterv1.ClusterCache
+	machines     ctlclusterv1.MachineCache
+	versionCache ctlharvesterv1.VersionCache
+	vmiCache     ctlkubevirtv1.VirtualMachineInstanceCache
+	httpClient   *http.Client
+	bearToken    string
 }
 
 func (v *upgradeValidator) Resource() types.Resource {
@@ -161,10 +157,6 @@ func (v *upgradeValidator) checkResources(version *v1beta1.Version) error {
 		return werror.NewBadRequest(fmt.Sprintf("cluster %s/%s status is %s, please wait for it to be provisioned", util.FleetLocalNamespaceName, util.LocalClusterName, cluster.Status.Phase))
 	}
 
-	if err := v.checkManagedCharts(); err != nil {
-		return err
-	}
-
 	if err := v.checkNodes(version); err != nil {
 		return err
 	}
@@ -202,26 +194,6 @@ func (v *upgradeValidator) hasDegradedVolume() (bool, error) {
 	}
 
 	return false, nil
-}
-
-func (v *upgradeValidator) checkManagedCharts() error {
-	managedCharts, err := v.managedChartCache.List(managedChartNamespace, labels.Everything())
-	if err != nil {
-		return werror.NewInternalError(fmt.Sprintf("can't list managed charts, err: %+v", err))
-	}
-
-	for _, managedChart := range managedCharts {
-		for _, condition := range managedChart.Status.Conditions {
-			if condition.Type == fleetv1alpha1.BundleConditionReady {
-				if condition.Status != corev1.ConditionTrue {
-					return werror.NewBadRequest(fmt.Sprintf("managed chart %s is not ready, please wait for it to be ready", managedChart.Name))
-				}
-				break
-			}
-		}
-	}
-
-	return nil
 }
 
 func (v *upgradeValidator) checkNodes(version *v1beta1.Version) error {

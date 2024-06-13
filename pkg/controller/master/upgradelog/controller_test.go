@@ -119,9 +119,9 @@ func newTestLoggingBuilder() *loggingBuilder {
 		WithLabel(util.LabelUpgradeLog, testUpgradeLogName)
 }
 
-func newTestManagedChartBuilder() *managedChartBuilder {
-	return newManagedChartBuilder(testManagedChartName)
-}
+// func newTestManagedChartBuilder() *managedChartBuilder {
+// 	return newManagedChartBuilder(testManagedChartName)
+// }
 
 func newTestPvcBuilder() *pvcBuilder {
 	return newPvcBuilder(testPvcName).
@@ -391,69 +391,6 @@ func TestHandler_OnJobChange(t *testing.T) {
 	}
 }
 
-func TestHandler_OnManagedChartChange(t *testing.T) {
-	type input struct {
-		key          string
-		managedChart *mgmtv3.ManagedChart
-		upgradeLog   *harvesterv1.UpgradeLog
-	}
-	type output struct {
-		managedChart *mgmtv3.ManagedChart
-		upgradeLog   *harvesterv1.UpgradeLog
-		err          error
-	}
-	var testCases = []struct {
-		name     string
-		given    input
-		expected output
-	}{
-		{
-			name: "The logging-operator ManagedChart is not ready, should therefore keep the respective UpgradeLog resource untouched",
-			given: input{
-				key:          testManagedChartName,
-				managedChart: newTestManagedChartBuilder().WithLabel(util.LabelUpgradeLog, testUpgradeLogName).Build(),
-				upgradeLog:   newTestUpgradeLogBuilder().Build(),
-			},
-			expected: output{
-				upgradeLog: newTestUpgradeLogBuilder().Build(),
-			},
-		},
-		{
-			name: "The logging-operator ManagedChart is ready, should therefore reflect on the UpgradeLog resource",
-			given: input{
-				key:          testManagedChartName,
-				managedChart: newTestManagedChartBuilder().WithLabel(util.LabelUpgradeLog, testUpgradeLogName).Ready().Build(),
-				upgradeLog:   newTestUpgradeLogBuilder().Build(),
-			},
-			expected: output{
-				upgradeLog: newTestUpgradeLogBuilder().
-					OperatorDeployedCondition(corev1.ConditionTrue, "", "").Build(),
-			},
-		},
-	}
-	for _, tc := range testCases {
-		var clientset = fake.NewSimpleClientset(tc.given.upgradeLog)
-
-		var handler = &handler{
-			namespace:        util.HarvesterSystemNamespaceName,
-			upgradeLogClient: fakeclients.UpgradeLogClient(clientset.HarvesterhciV1beta1().UpgradeLogs),
-			upgradeLogCache:  fakeclients.UpgradeLogCache(clientset.HarvesterhciV1beta1().UpgradeLogs),
-		}
-
-		var actual output
-		actual.managedChart, actual.err = handler.OnManagedChartChange(tc.given.key, tc.given.managedChart)
-
-		if tc.expected.upgradeLog != nil {
-			var err error
-			actual.upgradeLog, err = handler.upgradeLogCache.Get(util.HarvesterSystemNamespaceName, testUpgradeLogName)
-			assert.Nil(t, err)
-			emptyConditionsTime(tc.expected.upgradeLog.Status.Conditions)
-			emptyConditionsTime(actual.upgradeLog.Status.Conditions)
-			assert.Equal(t, tc.expected.upgradeLog, actual.upgradeLog, "case %q", tc.name)
-		}
-	}
-}
-
 func TestHandler_OnStatefulSetChange(t *testing.T) {
 	type input struct {
 		key         string
@@ -637,20 +574,20 @@ func TestHandler_OnUpgradeLogChange(t *testing.T) {
 					UpgradeLogReadyCondition(corev1.ConditionUnknown, "", "").Build(),
 			},
 		},
-		{
-			name: "Both Addon and ManagedChart do not exist, therefore install the ManagedChart",
-			given: input{
-				key: testUpgradeLogName,
-				upgradeLog: newTestUpgradeLogBuilder().
-					UpgradeLogReadyCondition(corev1.ConditionUnknown, "", "").Build(),
-			},
-			expected: output{
-				managedChart: prepareOperator(newTestUpgradeLogBuilder().Build()),
-				upgradeLog: newTestUpgradeLogBuilder().
-					UpgradeLogReadyCondition(corev1.ConditionUnknown, "", "").
-					OperatorDeployedCondition(corev1.ConditionUnknown, "", "").Build(),
-			},
-		},
+		// {
+		// 	name: "Both Addon and ManagedChart do not exist, therefore install the ManagedChart",
+		// 	given: input{
+		// 		key: testUpgradeLogName,
+		// 		upgradeLog: newTestUpgradeLogBuilder().
+		// 			UpgradeLogReadyCondition(corev1.ConditionUnknown, "", "").Build(),
+		// 	},
+		// 	expected: output{
+		// 		managedChart: prepareOperator(newTestUpgradeLogBuilder().Build()),
+		// 		upgradeLog: newTestUpgradeLogBuilder().
+		// 			UpgradeLogReadyCondition(corev1.ConditionUnknown, "", "").
+		// 			OperatorDeployedCondition(corev1.ConditionUnknown, "", "").Build(),
+		// 	},
+		// },
 		{
 			name: "There exists an enabled rancher-logging Addon, therefore skip the ManagedChart installation",
 			given: input{
@@ -665,20 +602,20 @@ func TestHandler_OnUpgradeLogChange(t *testing.T) {
 					OperatorDeployedCondition(corev1.ConditionTrue, "Skipped", "rancher-logging Addon is enabled").Build(),
 			},
 		},
-		{
-			name: "There exists a ready rancher-logging ManagedChart, therefore skip the ManagedChart installation",
-			given: input{
-				key:          testUpgradeLogName,
-				managedChart: newManagedChartBuilder(util.RancherLoggingName).Ready().Build(),
-				upgradeLog: newTestUpgradeLogBuilder().
-					UpgradeLogReadyCondition(corev1.ConditionUnknown, "", "").Build(),
-			},
-			expected: output{
-				upgradeLog: newTestUpgradeLogBuilder().
-					UpgradeLogReadyCondition(corev1.ConditionUnknown, "", "").
-					OperatorDeployedCondition(corev1.ConditionTrue, "Skipped", "rancher-logging ManagedChart is ready").Build(),
-			},
-		},
+		// {
+		// 	name: "There exists a ready rancher-logging ManagedChart, therefore skip the ManagedChart installation",
+		// 	given: input{
+		// 		key:          testUpgradeLogName,
+		// 		managedChart: newManagedChartBuilder(util.RancherLoggingName).Ready().Build(),
+		// 		upgradeLog: newTestUpgradeLogBuilder().
+		// 			UpgradeLogReadyCondition(corev1.ConditionUnknown, "", "").Build(),
+		// 	},
+		// 	expected: output{
+		// 		upgradeLog: newTestUpgradeLogBuilder().
+		// 			UpgradeLogReadyCondition(corev1.ConditionUnknown, "", "").
+		// 			OperatorDeployedCondition(corev1.ConditionTrue, "Skipped", "rancher-logging ManagedChart is ready").Build(),
+		// 	},
+		// },
 		{
 			name: "The logging-operator is deployed, should therefore create Logging resource",
 			given: input{
@@ -925,13 +862,13 @@ func TestHandler_OnUpgradeLogChange(t *testing.T) {
 			clusterOutputClient: fakeclients.ClusterOutputClient(clientset.LoggingV1beta1().ClusterOutputs),
 			deploymentClient:    fakeclients.DeploymentClient(k8sclientset.AppsV1().Deployments),
 			loggingClient:       fakeclients.LoggingClient(clientset.LoggingV1beta1().Loggings),
-			managedChartClient:  fakeclients.ManagedChartClient(clientset.ManagementV3().ManagedCharts),
-			managedChartCache:   fakeclients.ManagedChartCache(clientset.ManagementV3().ManagedCharts),
-			pvcClient:           fakeclients.PersistentVolumeClaimClient(k8sclientset.CoreV1().PersistentVolumeClaims),
-			serviceClient:       fakeclients.ServiceClient(k8sclientset.CoreV1().Services),
-			upgradeClient:       fakeclients.UpgradeClient(clientset.HarvesterhciV1beta1().Upgrades),
-			upgradeCache:        fakeclients.UpgradeCache(clientset.HarvesterhciV1beta1().Upgrades),
-			upgradeLogClient:    fakeclients.UpgradeLogClient(clientset.HarvesterhciV1beta1().UpgradeLogs),
+			// managedChartClient:  fakeclients.ManagedChartClient(clientset.ManagementV3().ManagedCharts),
+			// managedChartCache:   fakeclients.ManagedChartCache(clientset.ManagementV3().ManagedCharts),
+			pvcClient:        fakeclients.PersistentVolumeClaimClient(k8sclientset.CoreV1().PersistentVolumeClaims),
+			serviceClient:    fakeclients.ServiceClient(k8sclientset.CoreV1().Services),
+			upgradeClient:    fakeclients.UpgradeClient(clientset.HarvesterhciV1beta1().Upgrades),
+			upgradeCache:     fakeclients.UpgradeCache(clientset.HarvesterhciV1beta1().Upgrades),
+			upgradeLogClient: fakeclients.UpgradeLogClient(clientset.HarvesterhciV1beta1().UpgradeLogs),
 		}
 
 		var actual output
@@ -983,11 +920,11 @@ func TestHandler_OnUpgradeLogChange(t *testing.T) {
 			assert.Nil(t, actual.logging, "case %q", tc.name)
 		}
 
-		if tc.expected.managedChart != nil {
-			var err error
-			actual.managedChart, err = handler.managedChartClient.Get(util.FleetLocalNamespaceName, name.SafeConcatName(testUpgradeLogName, util.UpgradeLogOperatorComponent), metav1.GetOptions{})
-			assert.Nil(t, err)
-		}
+		// if tc.expected.managedChart != nil {
+		// 	var err error
+		// 	actual.managedChart, err = handler.managedChartClient.Get(util.FleetLocalNamespaceName, name.SafeConcatName(testUpgradeLogName, util.UpgradeLogOperatorComponent), metav1.GetOptions{})
+		// 	assert.Nil(t, err)
+		// }
 
 		if tc.expected.pvc != nil {
 			var err error
