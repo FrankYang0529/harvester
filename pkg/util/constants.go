@@ -105,4 +105,9 @@ const (
 	APIServerCAKey                           = "apiServerCA"
 
 	RKEControlPlaneRoleLabel = "rke.cattle.io/control-plane-role"
+
+	KubeNodeRoleLabelPrefix      = "node-role.kubernetes.io/"
+	KubeMasterNodeLabelKey       = KubeNodeRoleLabelPrefix + "master"
+	KubeControlPlaneNodeLabelKey = KubeNodeRoleLabelPrefix + "control-plane"
+	KubeEtcdNodeLabelKey         = KubeNodeRoleLabelPrefix + "etcd"
 )
