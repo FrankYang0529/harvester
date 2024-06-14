@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	harvesterv1 "github.com/harvester/harvester/pkg/apis/harvesterhci.io/v1beta1"
@@ -76,6 +78,9 @@ func (h *Handler) syncAutoRotateRKE2Certs(setting *harvesterv1.Setting) error {
 			return err
 		}
 
+		logrus.WithField(
+			"reconcileAfter", reconcileDuration,
+		).Info("Rotate RKE2 certificate")
 		h.settingController.EnqueueAfter(setting.Name, reconcileDuration)
 		return nil
 	}
@@ -136,10 +141,23 @@ func (h *Handler) getEarliestExpiringCert(addr string) (*x509.Certificate, error
 func (h *Handler) rotateRKE2Certs(setting *harvesterv1.Setting) (time.Duration, error) {
 	secret, err := h.secretCache.Get(util.CattleSystemNamespaceName, util.RotateRKE2CertsSecretName)
 	if err != nil {
-		return time.Duration(0), err
+		if !apierrors.IsNotFound(err) {
+			return time.Duration(0), err
+		}
+		secret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: util.CattleSystemNamespaceName,
+				Name:      util.RotateRKE2CertsSecretName,
+			},
+			Data: map[string][]byte{
+				util.RotateRKE2CertsLastTimestampName: []byte(time.Now().Format(time.RFC3339)),
+			},
+		}
+		_, err = h.secrets.Create(secret)
+		return defaultReconcilAutoRotateRKE2CertsSettingDuration, err
 	}
 	secretCopy := secret.DeepCopy()
 	secretCopy.Data[util.RotateRKE2CertsLastTimestampName] = []byte(time.Now().Format(time.RFC3339))
-	_, err = h.secrets.Update(secret)
+	_, err = h.secrets.Update(secretCopy)
 	return defaultReconcilAutoRotateRKE2CertsSettingDuration, err
 }
