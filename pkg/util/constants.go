@@ -145,4 +145,11 @@ const (
 	LabelCPUManagerUpdateNode        = prefix + "/cpu-manager-update-node"
 	LabelCPUManagerUpdatePolicy      = prefix + "/cpu-manager-update-policy"
 	LabelCPUManagerExitCode          = prefix + "/cpu-manager-exit-code"
+	KubeNodeRoleLabelPrefix          = "node-role.kubernetes.io/"
+	KubeMasterNodeLabelKey           = KubeNodeRoleLabelPrefix + "master"
+	KubeControlPlaneNodeLabelKey     = KubeNodeRoleLabelPrefix + "control-plane"
+	KubeEtcdNodeLabelKey             = KubeNodeRoleLabelPrefix + "etcd"
+
+	HarvesterNodeRoleLabelPrefix = "node-role.harvesterhci.io/"
+	HarvesterWitnessNodeLabelKey = HarvesterNodeRoleLabelPrefix + "witness"
 )
