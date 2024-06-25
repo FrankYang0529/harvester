@@ -43,6 +43,17 @@ func createSecrets(mgmt *config.Management) error {
 				util.RotateRKE2CertsLastTimestampName: []byte(""),
 			},
 		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: util.CattleSystemNamespaceName,
+				Name:      util.HttpProxySecretName,
+			},
+			Data: map[string][]byte{
+				util.HTTPProxyEnv:  []byte(""),
+				util.HTTPSProxyEnv: []byte(""),
+				util.NoProxyEnv:    []byte(""),
+			},
+		},
 	}
 	for i := range defaultSecrets {
 		defaultSecret := defaultSecrets[i]

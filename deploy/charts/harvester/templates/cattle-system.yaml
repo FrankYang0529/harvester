@@ -156,3 +156,75 @@ spec:
       - echo "Restart RKE2 agent to trigger certificate rotation ...";
         chroot /host systemctl restart rke2-agent;
         echo "Done";
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: harvester-update-http-proxy-script
+  namespace: cattle-system
+type: Opaque
+stringData:
+  update_http_proxy.sh: |
+    #!/bin/sh
+    RKE2_SA_ENV_FILE_PATH="/var/lib/rancher/rke2/system-agent-installer/rke2-sa.env"
+    OLD_ENV_FILE_PATH_HASH=""
+    update_env_file() {
+      local file_path=$1
+      local key=$2
+      local value=$3
+
+      if grep -q "^$key=" "$file_path"; then
+        sed -i "s|^$key=.*|$key=$value|" "$file_path"
+        echo "Updated $key with value $value in $file_path"
+      else
+        echo "$key=$value" >> "$file_path"
+        echo "Added $key=$value to $file_path"
+      fi
+    }
+
+    if [ -f "${RKE2_SA_ENV_FILE_PATH}" ]; then
+      OLD_ENV_FILE_PATH_HASH=$(sha256sum "${RKE2_SA_ENV_FILE_PATH}" | awk '{print $1}')
+    else
+      mkdir -p /var/lib/rancher/rke2/system-agent-installer
+      touch "${RKE2_SA_ENV_FILE_PATH}"
+      echo "Created file ${RKE2_SA_ENV_FILE_PATH}"
+    fi
+
+    update_env_file "${RKE2_SA_ENV_FILE_PATH}" "HTTP_PROXY" $(cat /run/system-upgrade/secrets/harvester-http-proxy/HTTP_PROXY)
+    update_env_file "${RKE2_SA_ENV_FILE_PATH}" "HTTPS_PROXY" $(cat /run/system-upgrade/secrets/harvester-http-proxy/HTTPS_PROXY)
+    update_env_file "${RKE2_SA_ENV_FILE_PATH}" "NO_PROXY" $(cat /run/system-upgrade/secrets/harvester-http-proxy/NO_PROXY)
+    echo "Content in ${RKE2_SA_ENV_FILE_PATH}: $(cat ${RKE2_SA_ENV_FILE_PATH})"
+
+    NEW_ENV_FILE_PATH_HASH=$(sha256sum "${RKE2_SA_ENV_FILE_PATH}" | awk '{print $1}')
+    if [ "$OLD_ENV_FILE_PATH_HASH" != "$NEW_ENV_FILE_PATH_HASH" ]; then
+      echo "Restarting RKE2 to apply new content in ${RKE2_SA_ENV_FILE_PATH} ..."
+      kill $(pgrep rke2)
+      echo "Done"
+    else
+      echo "Content in ${RKE2_SA_ENV_FILE_PATH} doesn't change."
+    fi
+---
+apiVersion: upgrade.cattle.io/v1
+kind: Plan
+metadata:
+  name: harvester-update-http-proxy
+  namespace: cattle-system
+spec:
+  concurrency: 1
+  nodeSelector:
+    matchLabels:
+      harvesterhci.io/managed: "true"
+  tolerations:
+  - effect: NoExecute
+    operator: Exists
+  serviceAccountName: system-upgrade-controller
+  secrets:
+  - name: harvester-http-proxy
+    path: /host/run/system-upgrade/secrets/harvester-http-proxy
+  - name: harvester-update-http-proxy-script
+    path: /host/run/system-upgrade/secrets/scripts
+  version: v1.0.0
+  upgrade:
+    image: {{ .Values.generalJob.image.repository }}:{{ .Values.generalJob.image.tag }}
+    command: ["chroot", "/host"]
+    args: ["sh", "/run/system-upgrade/secrets/scripts/update_http_proxy.sh"]

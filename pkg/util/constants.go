@@ -7,6 +7,7 @@ const (
 	AdditionalCAFileName             = "additional-ca.pem"
 	RotateRKE2CertsSecretName        = "harvester-rotate-rke2-certs"
 	RotateRKE2CertsLastTimestampName = "rotate-rke2-certs-last-timestamp"
+	HttpProxySecretName              = "harvester-http-proxy"
 	AnnotationMigrationTarget        = prefix + "/migrationTargetNodeName"
 	AnnotationMigrationUID           = prefix + "/migrationUID"
 	AnnotationMigrationState         = prefix + "/migrationState"
