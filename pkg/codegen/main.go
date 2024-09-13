@@ -12,6 +12,7 @@ import (
 	longhornv1 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	"github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	fleetv1alpha1 "github.com/rancher/fleet/pkg/apis/fleet.cattle.io/v1alpha1"
 	catalogv1 "github.com/rancher/rancher/pkg/apis/catalog.cattle.io/v1"
 	mgmtv3 "github.com/rancher/rancher/pkg/apis/management.cattle.io/v3"
 	upgradev1 "github.com/rancher/system-upgrade-controller/pkg/apis/upgrade.cattle.io/v1"
@@ -172,6 +173,13 @@ func main() {
 				Types: []interface{}{
 					appsv1.ControllerRevision{},
 				},
+			},
+			fleetv1alpha1.SchemeGroupVersion.Group: {
+				Types: []interface{}{
+					fleetv1alpha1.Cluster{},
+					fleetv1alpha1.Bundle{},
+				},
+				GenerateClients: true,
 			},
 		},
 	})
