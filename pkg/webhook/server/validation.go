@@ -77,7 +77,7 @@ func Validation(clients *clients.Clients, options *config.Options) (http.Handler
 			clients.LonghornFactory.Longhorn().V1beta2().Volume().Cache(),
 			clients.ClusterFactory.Cluster().V1beta1().Cluster().Cache(),
 			clients.ClusterFactory.Cluster().V1beta1().Machine().Cache(),
-			clients.RancherManagementFactory.Management().V3().ManagedChart().Cache(),
+			clients.FleetFactory.Fleet().V1alpha1().Bundle().Cache(),
 			clients.HarvesterFactory.Harvesterhci().V1beta1().Version().Cache(),
 			clients.KubevirtFactory.Kubevirt().V1().VirtualMachineInstance().Cache(),
 			&http.Client{
@@ -114,7 +114,6 @@ func Validation(clients *clients.Clients, options *config.Options) (http.Handler
 			clients.HarvesterFactory.Harvesterhci().V1beta1().VirtualMachineRestore().Cache(),
 			clients.KubevirtFactory.Kubevirt().V1().VirtualMachine().Cache(),
 			clients.KubevirtFactory.Kubevirt().V1().VirtualMachineInstance().Cache(),
-			clients.RancherManagementFactory.Management().V3().Feature().Cache(),
 			clients.LonghornFactory.Longhorn().V1beta2().Volume().Cache(),
 			clients.CoreFactory.Core().V1().PersistentVolumeClaim().Cache(),
 		),

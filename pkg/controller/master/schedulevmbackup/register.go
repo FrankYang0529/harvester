@@ -3,7 +3,6 @@ package schedulevmbackup
 import (
 	"context"
 
-	catalogv1 "github.com/rancher/rancher/pkg/generated/controllers/catalog.cattle.io/v1"
 	ctlcorev1 "github.com/rancher/wrangler/v3/pkg/generated/controllers/core/v1"
 
 	"github.com/harvester/harvester/pkg/config"
@@ -33,13 +32,11 @@ type svmbackupHandler struct {
 	settingCache        ctlharvesterv1.SettingCache
 	secretCache         ctlcorev1.SecretCache
 	namespace           string
-	appCache            catalogv1.AppCache
 }
 
 func Register(ctx context.Context, management *config.Management, options config.Options) error {
 	svmbackups := management.HarvesterFactory.Harvesterhci().V1beta1().ScheduleVMBackup()
 	cronJobs := management.HarvesterBatchFactory.Batch().V1().CronJob()
-	appCache := management.CatalogFactory.Catalog().V1().App().Cache()
 	vmBackups := management.HarvesterFactory.Harvesterhci().V1beta1().VirtualMachineBackup()
 	snapshots := management.SnapshotFactory.Snapshot().V1().VolumeSnapshot()
 	lhsnapshots := management.LonghornFactory.Longhorn().V1beta2().Snapshot()
@@ -60,7 +57,6 @@ func Register(ctx context.Context, management *config.Management, options config
 		settingCache:        settings.Cache(),
 		secretCache:         secrets.Cache(),
 		namespace:           options.Namespace,
-		appCache:            appCache,
 	}
 
 	svmbackups.OnChange(ctx, scheduleVMBackupControllerName, svmbackupHandler.OnChanged)

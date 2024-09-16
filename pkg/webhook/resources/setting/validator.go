@@ -23,7 +23,6 @@ import (
 	_ "github.com/longhorn/backupstore/s3"  //nolint
 	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
 	"github.com/rancher/lasso/pkg/log"
-	mgmtv3 "github.com/rancher/rancher/pkg/generated/controllers/management.cattle.io/v3"
 	ctlcorev1 "github.com/rancher/wrangler/v3/pkg/generated/controllers/core/v1"
 	"github.com/rancher/wrangler/v3/pkg/slice"
 	"github.com/sirupsen/logrus"
@@ -126,7 +125,6 @@ func NewValidator(
 	vmRestoreCache ctlv1beta1.VirtualMachineRestoreCache,
 	vmCache ctlkubevirtv1.VirtualMachineCache,
 	vmiCache ctlkubevirtv1.VirtualMachineInstanceCache,
-	featureCache mgmtv3.FeatureCache,
 	lhVolumeCache ctllhv1b2.VolumeCache,
 	pvcCache ctlcorev1.PersistentVolumeClaimCache,
 ) types.Validator {
@@ -138,7 +136,6 @@ func NewValidator(
 		vmRestoreCache:     vmRestoreCache,
 		vmCache:            vmCache,
 		vmiCache:           vmiCache,
-		featureCache:       featureCache,
 		lhVolumeCache:      lhVolumeCache,
 		pvcCache:           pvcCache,
 	}
@@ -168,7 +165,6 @@ type settingValidator struct {
 	vmRestoreCache     ctlv1beta1.VirtualMachineRestoreCache
 	vmCache            ctlkubevirtv1.VirtualMachineCache
 	vmiCache           ctlkubevirtv1.VirtualMachineInstanceCache
-	featureCache       mgmtv3.FeatureCache
 	lhVolumeCache      ctllhv1b2.VolumeCache
 	pvcCache           ctlcorev1.PersistentVolumeClaimCache
 }
