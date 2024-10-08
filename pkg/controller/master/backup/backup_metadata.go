@@ -170,7 +170,10 @@ func (h *MetadataHandler) syncVMImage(target *settings.BackupTarget) error {
 }
 
 func (h *MetadataHandler) createVMImageIfNotExist(imageMetadata VirtualMachineImageMetadata) error {
-	if _, err := h.vmImageCache.Get(imageMetadata.Namespace, imageMetadata.Name); err != nil && !apierrors.IsNotFound(err) {
+	if _, err := h.vmImageCache.Get(imageMetadata.Namespace, imageMetadata.Name); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
 		return err
 	} else if err == nil {
 		return nil
@@ -244,7 +247,10 @@ func (h *MetadataHandler) syncVMBackup(target *settings.BackupTarget) error {
 }
 
 func (h *MetadataHandler) createVMBackupIfNotExist(backupMetadata VirtualMachineBackupMetadata, target *settings.BackupTarget) error {
-	if _, err := h.vmBackupCache.Get(backupMetadata.Namespace, backupMetadata.Name); err != nil && !apierrors.IsNotFound(err) {
+	if _, err := h.vmBackupCache.Get(backupMetadata.Namespace, backupMetadata.Name); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
 		return err
 	} else if err == nil {
 		return nil
