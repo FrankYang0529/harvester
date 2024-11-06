@@ -203,8 +203,8 @@ command_prepare()
 {
   wait_repo
   detect_repo
-  detect_upgrade
-  check_version
+  # detect_upgrade
+  # check_version
   preload_images
 }
 
@@ -390,7 +390,7 @@ EOF
 wait_rke2_upgrade() {
   # RKE2 doesn't show '-rcX' in nodeInfo, so we remove '-rcX' in $REPO_RKE2_VERSION.
   # Warning: we can't upgrade from a '-rcX' to another in the same minor version like v1.22.12-rc1+rke2r1 to v1.22.12-rc2+rke2r1.
-  REPO_RKE2_VERSION_WITHOUT_RC=$(echo -n $REPO_RKE2_VERSION | sed 's/-rc[[:digit:]]*//g') 
+  REPO_RKE2_VERSION_WITHOUT_RC=$(echo -n $REPO_RKE2_VERSION | sed 's/-rc[[:digit:]]*//g')
   until [ "$(get_node_rke2_version)" = "$REPO_RKE2_VERSION_WITHOUT_RC" ]
   do
     echo "Waiting for RKE2 to be upgraded..."
@@ -575,7 +575,7 @@ upgrade_os() {
     echo "Skip upgrading OS. The OS version is already \"$CURRENT_OS_VERSION\"."
     return
   fi
-  
+
   # upgrade OS image and reboot
   if [ -n "$NEW_OS_SQUASHFS_IMAGE_FILE" ]; then
     tmp_rootfs_squashfs="$NEW_OS_SQUASHFS_IMAGE_FILE"
@@ -625,7 +625,7 @@ EOF
   # PATCH2: add /oem/grubcustom if it does not exist
   # grubcustom use source to load, so we can use touch directly
   GRUBENV_FILE="/oem/grubcustom"
-  chroot $HOST_DIR /bin/bash -c "if ! [ -f ${GRUBENV_FILE} ]; then touch ${GRUBENV_FILE}; fi" 
+  chroot $HOST_DIR /bin/bash -c "if ! [ -f ${GRUBENV_FILE} ]; then touch ${GRUBENV_FILE}; fi"
 
   umount $tmp_rootfs_mount
   rm -rf $tmp_rootfs_squashfs
