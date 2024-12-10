@@ -17,11 +17,13 @@ import (
 	// Although we don't use following drivers directly, we need to import them to register drivers.
 	// NFS Ref: https://github.com/longhorn/backupstore/blob/3912081eb7c5708f0027ebbb0da4934537eb9d72/nfs/nfs.go#L47-L51
 	// S3 Ref: https://github.com/longhorn/backupstore/blob/3912081eb7c5708f0027ebbb0da4934537eb9d72/s3/s3.go#L33-L37
+	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/harvester/go-common/ds"
 	"github.com/longhorn/backupstore"
 	_ "github.com/longhorn/backupstore/nfs" //nolint
 	_ "github.com/longhorn/backupstore/s3"  //nolint
 	lhv1beta2 "github.com/longhorn/longhorn-manager/k8s/pkg/apis/longhorn/v1beta2"
+	"github.com/rancher/lasso/pkg/client"
 	"github.com/rancher/lasso/pkg/log"
 	mgmtv3 "github.com/rancher/rancher/pkg/generated/controllers/management.cattle.io/v3"
 	ctlcorev1 "github.com/rancher/wrangler/v3/pkg/generated/controllers/core/v1"
@@ -33,8 +35,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-
-	mapset "github.com/deckarep/golang-set/v2"
+	"k8s.io/client-go/tools/clientcmd"
 
 	networkv1 "github.com/harvester/harvester-network-controller/pkg/apis/network.harvesterhci.io/v1beta1"
 	"github.com/harvester/harvester-network-controller/pkg/utils"
@@ -96,6 +97,7 @@ var validateSettingFuncs = map[string]validateSettingFunc{
 	settings.AutoRotateRKE2CertsSettingName:                    validateAutoRotateRKE2Certs,
 	settings.KubeconfigDefaultTokenTTLMinutesSettingName:       validateKubeConfigTTLSetting,
 	settings.AdditionalGuestMemoryOverheadRatioName:            validateAdditionalGuestMemoryOverheadRatio,
+	settings.RancherClusterSettingName:                         validateRancherCluster,
 }
 
 type validateSettingUpdateFunc func(oldSetting *v1beta1.Setting, newSetting *v1beta1.Setting) error
@@ -1500,4 +1502,45 @@ func (v *settingValidator) isSingleNode() (bool, error) {
 		return false, err
 	}
 	return len(nodes) == 1, nil
+}
+
+func validateRancherCluster(newSetting *v1beta1.Setting) error {
+	var (
+		kubeConfig                                  string
+		removeUpstreamClusterWhenNamespaceIsDeleted bool
+	)
+	if newSetting.Default != "" && newSetting.Default != "{}" {
+		rancherClusterConfig, err := settings.DecodeConfig[settings.RancherClusterConfig](newSetting.Default)
+		if err != nil {
+			return werror.NewInvalidError(err.Error(), settings.KeywordDefault)
+		}
+		kubeConfig = rancherClusterConfig.KubeConfig
+		removeUpstreamClusterWhenNamespaceIsDeleted = rancherClusterConfig.RemoveUpstreamClusterWhenNamespaceIsDeleted
+	}
+
+	if newSetting.Value != "" && newSetting.Value != "{}" {
+		rancherClusterConfig, err := settings.DecodeConfig[settings.RancherClusterConfig](newSetting.Value)
+		if err != nil {
+			return werror.NewInvalidError(err.Error(), settings.KeywordValue)
+		}
+		kubeConfig = rancherClusterConfig.KubeConfig
+		removeUpstreamClusterWhenNamespaceIsDeleted = rancherClusterConfig.RemoveUpstreamClusterWhenNamespaceIsDeleted
+	}
+	if kubeConfig == "" && removeUpstreamClusterWhenNamespaceIsDeleted {
+		return werror.NewInvalidError(
+			fmt.Sprint("kubeConfig can't be empty when removeUpstreamClusterWhenNamespaceIsDeleted is true"), "kubeConfig")
+	}
+	if kubeConfig != "" {
+		kc, err := clientcmd.RESTConfigFromKubeConfig([]byte(kubeConfig))
+		if err != nil {
+			return werror.NewInvalidError(
+				fmt.Sprint("kubeConfig can't be loaded"), "kubeConfig")
+		}
+		_, err = client.NewSharedClientFactory(kc, nil)
+		if err != nil {
+			return werror.NewInvalidError(
+				fmt.Sprint("kubeConfig can't be used to initialize client"), "kubeConfig")
+		}
+	}
+	return nil
 }

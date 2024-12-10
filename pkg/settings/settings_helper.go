@@ -239,3 +239,8 @@ func ValidateAdditionalGuestMemoryOverheadRatioHelper(value string) error {
 	_, err := NewAdditionalGuestMemoryOverheadRatioConfig(value)
 	return err
 }
+
+type RancherClusterConfig struct {
+	KubeConfig                                  string `json:"kubeConfig"`
+	RemoveUpstreamClusterWhenNamespaceIsDeleted bool   `json:"removeUpstreamClusterWhenNamespaceIsDeleted"`
+}
