@@ -486,6 +486,10 @@ func validateBackupTargetHelper(setting *v1beta1.Setting) (*settings.BackupTarge
 		if err != nil {
 			return nil, werror.NewInvalidError(err.Error(), settings.KeywordValue)
 		}
+		logrus.WithFields(logrus.Fields{
+			"setting": setting.Name,
+			"target":  valueTarget,
+		}).Info("Validate backup target")
 		target = valueTarget
 	}
 	return target, nil
