@@ -1,5 +1,7 @@
 package network
 
+import "fmt"
+
 const (
 	BridgeSuffix = "-br"
 	CNIVersion   = "0.3.1"
@@ -13,6 +15,14 @@ type Config struct {
 	Vlan           uint16   `json:"vlan,omitempty"`
 	Range          string   `json:"range,omitempty"`
 	Exclude        []string `json:"exclude,omitempty"`
+}
+
+func (c *Config) ToString() string {
+	if c == nil {
+		return ""
+	}
+	return fmt.Sprintf("{''ClusterNetwork'': '%s', ''Vlan'': %d, ''Range'': '%s', ''Exclude'': %v}",
+		c.ClusterNetwork, c.Vlan, c.Range, c.Exclude)
 }
 
 // Note: this data type should align with https://github.com/containernetworking/cni/blob/main/pkg/types/types.go#L64-L78
