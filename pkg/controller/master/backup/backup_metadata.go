@@ -693,7 +693,7 @@ func (h *MetadataHandler) checkReadyVMBackupVolume(vmBackup *harvesterv1.Virtual
 	if volumeBackup.LonghornBackupName == nil {
 		return true, ""
 	}
-	if ok, msg := h.checkVolumeInBackupTarget(vmBackup, volumeBackup, target); !ok {
+	if ok, msg := checkVolumeInBackupTarget(vmBackup, volumeBackup, target); !ok {
 		return false, msg
 	}
 	if ok, msg := h.checkLonghornBackupReady(vmBackup, volumeBackup); !ok {
@@ -714,33 +714,6 @@ func (h *MetadataHandler) checkVolumeStorageClass(vmBackup *harvesterv1.VirtualM
 			"name":          vmBackup.Name,
 			"storageClasss": *storageClassName,
 		}).Warn("cannot find storage class for a ready VMBackup, change the VMBackup to not ready")
-		volumeBackup.ReadyToUse = ptr.To(false)
-		return false, msg
-	}
-	return true, ""
-}
-
-func (h *MetadataHandler) checkVolumeInBackupTarget(vmBackup *harvesterv1.VirtualMachineBackup, volumeBackup *harvesterv1.VolumeBackup, target *settings.BackupTarget) (bool, string) {
-	volumeName := volumeBackup.PersistentVolumeClaim.Spec.VolumeName
-	volumes, err := backupstore.List(volumeName, util.ConstructEndpoint(target), false)
-	if err != nil || volumes[volumeName] == nil {
-		msg := fmt.Sprintf("cannot find volume %s in the backup target", volumeName)
-		logrus.WithError(err).WithFields(logrus.Fields{
-			"namespace": vmBackup.Namespace,
-			"name":      vmBackup.Name,
-			"volume":    volumeName,
-		}).Warn("cannot find volume in the backup target for a ready VMBackup, change the VMBackup to not ready")
-		volumeBackup.ReadyToUse = ptr.To(false)
-		return false, msg
-	}
-	if volumes[volumeName].Backups[*volumeBackup.LonghornBackupName] == nil {
-		msg := fmt.Sprintf("cannot find longhorn backup %s in the backup target", *volumeBackup.LonghornBackupName)
-		logrus.WithFields(logrus.Fields{
-			"namespace":      vmBackup.Namespace,
-			"name":           vmBackup.Name,
-			"volume":         volumeName,
-			"longhornBackup": *volumeBackup.LonghornBackupName,
-		}).Warn("cannot find longhorn backup in the backup target for a ready VMBackup, change the VMBackup to not ready")
 		volumeBackup.ReadyToUse = ptr.To(false)
 		return false, msg
 	}
