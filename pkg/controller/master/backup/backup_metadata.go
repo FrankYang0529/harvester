@@ -642,7 +642,6 @@ func (h *MetadataHandler) checkExistingVMBackup(target *settings.BackupTarget) e
 	}
 
 	h.checkReadyVMBackup(vmBackups, target)
-	h.checkNonReadyVMBackup(vmBackups)
 	return nil
 }
 
@@ -658,11 +657,11 @@ func (h *MetadataHandler) checkReadyVMBackup(vmBackups []*harvesterv1.VirtualMac
 		vmBackupIsHealthy := true
 		message := ""
 		for _, volumeBackup := range volBackups {
-			volHealthy, volMsg := h.checkReadyVMBackupVolume(vmBackup, &volumeBackup, target)
+			volHealthy, err := h.checkReadyVMBackupVolume(vmBackup, &volumeBackup, target)
 			if !volHealthy {
 				vmBackupIsHealthy = false
-				if message == "" {
-					message = volMsg
+				if err != nil {
+					message = err.Error()
 				}
 			}
 		}
@@ -686,43 +685,41 @@ func (h *MetadataHandler) checkReadyVMBackup(vmBackups []*harvesterv1.VirtualMac
 
 // checkReadyVMBackupVolume checks a single volumeBackup and updates its ReadyToUse field if needed.
 // Returns (healthy, message) for this volume.
-func (h *MetadataHandler) checkReadyVMBackupVolume(vmBackup *harvesterv1.VirtualMachineBackup, volumeBackup *harvesterv1.VolumeBackup, target *settings.BackupTarget) (bool, string) {
-	if ok, msg := h.checkVolumeStorageClass(vmBackup, volumeBackup); !ok {
-		return false, msg
+func (h *MetadataHandler) checkReadyVMBackupVolume(vmBackup *harvesterv1.VirtualMachineBackup, volumeBackup *harvesterv1.VolumeBackup, target *settings.BackupTarget) (bool, error) {
+	if ok, err := h.checkVolumeStorageClass(vmBackup, volumeBackup); !ok {
+		return false, err
 	}
 	if volumeBackup.LonghornBackupName == nil {
-		return true, ""
+		return true, nil
 	}
-	if ok, msg := checkVolumeInBackupTarget(vmBackup, volumeBackup, target); !ok {
-		return false, msg
+	if ok, err := checkVolumeInBackupTarget(vmBackup, volumeBackup, target); !ok {
+		return false, err
 	}
-	if ok, msg := h.checkLonghornBackupReady(vmBackup, volumeBackup); !ok {
-		return false, msg
+	if ok, err := h.checkLonghornBackupReady(vmBackup, volumeBackup); !ok {
+		return false, err
 	}
-	return true, ""
+	return true, nil
 }
 
-func (h *MetadataHandler) checkVolumeStorageClass(vmBackup *harvesterv1.VirtualMachineBackup, volumeBackup *harvesterv1.VolumeBackup) (bool, string) {
+func (h *MetadataHandler) checkVolumeStorageClass(vmBackup *harvesterv1.VirtualMachineBackup, volumeBackup *harvesterv1.VolumeBackup) (bool, error) {
 	storageClassName := volumeBackup.PersistentVolumeClaim.Spec.StorageClassName
 	if storageClassName == nil {
-		return true, ""
+		return true, nil
 	}
 	if err := checkStorageClass(h.storageClassCache, *storageClassName); err != nil {
-		msg := fmt.Sprintf("cannot find storage class %s", *storageClassName)
 		logrus.WithError(err).WithFields(logrus.Fields{
 			"namespace":     vmBackup.Namespace,
 			"name":          vmBackup.Name,
 			"storageClasss": *storageClassName,
 		}).Warn("cannot find storage class for a ready VMBackup, change the VMBackup to not ready")
 		volumeBackup.ReadyToUse = ptr.To(false)
-		return false, msg
+		return false, fmt.Errorf("cannot find storage class %s", *storageClassName)
 	}
-	return true, ""
+	return true, nil
 }
 
-func (h *MetadataHandler) checkLonghornBackupReady(vmBackup *harvesterv1.VirtualMachineBackup, volumeBackup *harvesterv1.VolumeBackup) (bool, string) {
+func (h *MetadataHandler) checkLonghornBackupReady(vmBackup *harvesterv1.VirtualMachineBackup, volumeBackup *harvesterv1.VolumeBackup) (bool, error) {
 	if err := checkLHBackup(h.longhornBackupCache, *volumeBackup.LonghornBackupName); err != nil {
-		msg := fmt.Sprintf("longhorn backup %s is not ready", *volumeBackup.LonghornBackupName)
 		logrus.WithError(err).WithFields(logrus.Fields{
 			"namespace":      vmBackup.Namespace,
 			"name":           vmBackup.Name,
@@ -730,52 +727,7 @@ func (h *MetadataHandler) checkLonghornBackupReady(vmBackup *harvesterv1.Virtual
 			"longhornBackup": *volumeBackup.LonghornBackupName,
 		}).Warn("longhorn backup is not ready, change the VMBackup to not ready")
 		volumeBackup.ReadyToUse = ptr.To(false)
-		return false, msg
+		return false, fmt.Errorf("longhorn backup %s is not ready", *volumeBackup.LonghornBackupName)
 	}
-	return true, ""
-}
-
-func (h *MetadataHandler) checkNonReadyVMBackup(vmBackups []*harvesterv1.VirtualMachineBackup) {
-	for _, vmBackup := range vmBackups {
-		if ShouldSkipNonReadyVMBackup(vmBackup) {
-			continue
-		}
-
-		vmBackupCopy := vmBackup.DeepCopy()
-		status := vmBackupCopy.Status
-		volBackups := status.VolumeBackups
-		for i, volumeBackup := range volBackups {
-			// introduce local variables for readability
-			pvc := volumeBackup.PersistentVolumeClaim
-			storageClassName := pvc.Spec.StorageClassName
-			longhornBackupName := volumeBackup.LonghornBackupName
-
-			// skip non-longhorn volume and ready volume
-			if volumeBackup.ReadyToUse == nil || *volumeBackup.ReadyToUse || longhornBackupName == nil {
-				continue
-			}
-
-			if storageClassName != nil {
-				if err := checkStorageClass(h.storageClassCache, *storageClassName); err != nil {
-					continue
-				}
-			}
-
-			if err := checkLHBackup(h.longhornBackupCache, *longhornBackupName); err != nil {
-				continue
-			}
-
-			volBackups[i].ReadyToUse = ptr.To(true)
-			volBackups[i].Error = nil
-		}
-
-		if !reflect.DeepEqual(vmBackup.Status.VolumeBackups, volBackups) {
-			if _, err := h.vmBackups.Update(vmBackupCopy); err != nil {
-				logrus.WithError(err).WithFields(logrus.Fields{
-					"namespace": vmBackup.Namespace,
-					"name":      vmBackup.Name,
-				}).Error("cannot update VMBackup status")
-			}
-		}
-	}
+	return true, nil
 }

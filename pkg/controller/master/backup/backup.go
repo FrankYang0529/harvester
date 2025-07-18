@@ -633,13 +633,12 @@ func (h *Handler) reconcileVolumeSnapshots(vmBackup *harvesterv1.VirtualMachineB
 				return err
 			}
 
-			if volumeInBackupTarget, errorMessage := checkVolumeInBackupTarget(vmBackup, &volumeBackup, target); !volumeInBackupTarget && errorMessage != "" {
-				logrus.WithFields(logrus.Fields{
+			if _, err := checkVolumeInBackupTarget(vmBackup, &volumeBackup, target); err != nil {
+				logrus.WithError(err).WithFields(logrus.Fields{
 					"name":           vmBackupCpy.Name,
 					"namespace":      vmBackupCpy.Namespace,
 					"volumeBackup":   *volumeBackup.Name,
 					"longhornBackup": *volumeBackup.LonghornBackupName,
-					logrus.ErrorKey:  errorMessage,
 				}).Warnf("failed to check volume in backup target")
 				// If we return error here and the volume is not in backup target, the controller will keep retrying this VMBakcup.
 				// Ignore error because we will reconcile the volume again in backup_metadata.go
