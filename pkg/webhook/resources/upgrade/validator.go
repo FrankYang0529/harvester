@@ -199,6 +199,10 @@ func (v *upgradeValidator) checkResources(upgrade *v1beta1.Upgrade) error {
 		return err
 	}
 
+	if err := v.checkWaitForBackingImageVolumes(); err != nil {
+		return err
+	}
+
 	restoreVM, err := util.IsRestoreVM(v.settingCache)
 	if err != nil {
 		return err
@@ -487,6 +491,29 @@ func checkAllSingleReplicaVols(singleReplicaVols []*lhv1beta2.Volume) error {
 	if len(volumeNames) > 0 {
 		return werror.NewInvalidError(
 			fmt.Sprintf("Following PVCs with single-replica volume, even the volume is detached, upgrade may have potential data integrity concerns: %s", strings.Join(volumeNames, ", ")), "",
+		)
+	}
+	return nil
+}
+
+func (v *upgradeValidator) checkWaitForBackingImageVolumes() error {
+	volumes, err := v.lhVolumes.List(corev1.NamespaceAll, labels.Everything())
+	if err != nil {
+		return err
+	}
+
+	var waitForBackingImageVolume []string
+	for _, volume := range volumes {
+		for _, condition := range volume.Status.Conditions {
+			if condition.Type == lhv1beta2.VolumeConditionTypeWaitForBackingImage && condition.Status == lhv1beta2.ConditionStatusTrue {
+				waitForBackingImageVolume = append(waitForBackingImageVolume, volume.Name)
+			}
+		}
+	}
+
+	if len(waitForBackingImageVolume) > 0 {
+		return werror.NewInvalidError(
+			fmt.Sprintf("Following volumes are waiting for backing image: %s", strings.Join(waitForBackingImageVolume, ", ")), "",
 		)
 	}
 	return nil
